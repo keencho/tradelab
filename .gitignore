@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# DB
+*.db
+
+# API keys
+.env
+config.local.py
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Data cache
+data/cache/
+*.csv.tmp
+
+# Jupyter
+.ipynb_checkpoints/
