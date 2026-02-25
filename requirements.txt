@@ -1,0 +1,25 @@
+# Python 3.14+
+
+# Phase 1: 웹 + DB
+fastapi>=0.115
+uvicorn[standard]>=0.34
+jinja2>=3.1
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+python-dotenv>=1.1
+
+# Phase 2~: 데이터 수집
+# pandas>=2.2
+# yfinance>=0.2.50
+# ccxt>=4.4
+# pykrx>=1.0
+
+# Phase 3~: ML
+# lightgbm>=4.6
+# vectorbt>=0.26
+
+# Phase 3~: AI
+# google-generativeai>=0.8
+
+# Phase 5~: 알림
+# python-telegram-bot>=21.0

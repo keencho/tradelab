@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Signals{% endblock %}
+
+{% block content %}
+<!-- 필터 -->
+<div class="flex items-center gap-3 mb-6">
+    <button class="px-4 py-2 text-sm rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">전체</button>
+    <button class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">
+        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span>Bullish
+    </button>
+    <button class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">
+        <span class="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5"></span>Bearish
+    </button>
+    <div class="ml-auto">
+        <input type="text" placeholder="종목 검색..."
+            class="bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none w-48">
+    </div>
+</div>
+
+<!-- 시그널 카드 -->
+<div class="space-y-3">
+    {% for s in signals %}
+    <div class="bg-surface rounded-xl border border-slate-700 p-5 hover:border-slate-600 transition-colors">
+        <div class="flex items-start gap-4">
+            <!-- 방향 아이콘 -->
+            <div class="mt-1 shrink-0">
+                {% if s.direction == 'bullish' %}
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/>
+                    </svg>
+                </div>
+                {% else %}
+                <div class="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 13l-5 5m0 0l-5-5m5 5V6"/>
+                    </svg>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- 내용 -->
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-base font-bold text-white">{{ s.ticker }}</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">{{ s.type }}</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full
+                        {% if s.direction == 'bullish' %}bg-emerald-500/10 text-emerald-400
+                        {% else %}bg-red-500/10 text-red-400{% endif %}">
+                        {{ s.direction }}
+                    </span>
+                </div>
+                <p class="text-sm text-slate-300 mb-2">{{ s.desc }}</p>
+
+                {% if s.ai %}
+                <div class="bg-base/80 rounded-lg p-3 border border-slate-700/50">
+                    <div class="flex items-center gap-1.5 mb-1">
+                        <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                        </svg>
+                        <span class="text-xs text-sky-400 font-medium">AI 분석</span>
+                    </div>
+                    <p class="text-xs text-slate-400 leading-relaxed">{{ s.ai }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- 우측 정보 -->
+            <div class="text-right shrink-0">
+                <div class="text-xs text-slate-500 mb-2">{{ s.time }}</div>
+                <div class="mb-2">
+                    <span class="text-lg font-bold
+                        {% if s.confidence >= 0.8 %}text-emerald-400
+                        {% elif s.confidence >= 0.6 %}text-amber-400
+                        {% else %}text-slate-400{% endif %}">
+                        {{ (s.confidence * 100)|int }}%
+                    </span>
+                </div>
+                <!-- 확신도 바 -->
+                <div class="w-20 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full
+                        {% if s.confidence >= 0.8 %}bg-emerald-500
+                        {% elif s.confidence >= 0.6 %}bg-amber-500
+                        {% else %}bg-slate-500{% endif %}"
+                        style="width: {{ (s.confidence * 100)|int }}%">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,67 @@
+<header class="h-16 border-b border-slate-700 bg-surface/50 backdrop-blur-sm flex items-center justify-between px-6">
+    <div>
+        <h1 class="text-lg font-semibold text-white">
+            {% block page_title %}
+            {% if page == 'dashboard' %}Dashboard
+            {% elif page == 'portfolio' %}Portfolio
+            {% elif page == 'research' %}Research
+            {% elif page == 'signals' %}Signals
+            {% elif page == 'news' %}News
+            {% endif %}
+            {% endblock %}
+        </h1>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <span class="text-xs text-slate-500" id="session-timer"></span>
+        <button onclick="resetSession()" title="세션 갱신 (24h 리셋)"
+                class="text-slate-500 hover:text-white transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+        </button>
+    </div>
+</header>
+
+<script>
+    // 페이지가 렌더링됐으면 인증된 상태
+    // localStorage에 만료시간 없으면 지금부터 24h 세팅
+    const SESSION_KEY = 'tl_session_end';
+    let sessionEnd = parseInt(localStorage.getItem(SESSION_KEY));
+
+    if (!sessionEnd || isNaN(sessionEnd)) {
+        sessionEnd = Date.now() + 24 * 3600 * 1000;
+        localStorage.setItem(SESSION_KEY, sessionEnd);
+    }
+
+    function updateSessionTimer() {
+        const remaining = Math.max(0, sessionEnd - Date.now());
+        const el = document.getElementById('session-timer');
+        if (remaining === 0) {
+            el.textContent = 'expired';
+            el.classList.add('text-red-400');
+            return;
+        }
+        const h = Math.floor(remaining / 3600000);
+        const m = Math.floor((remaining % 3600000) / 60000);
+        const s = Math.floor((remaining % 60000) / 1000);
+        el.textContent = h + 'h ' + String(m).padStart(2, '0') + 'm ' + String(s).padStart(2, '0') + 's';
+    }
+
+    function resetSession() {
+        fetch('/api/session/reset', { method: 'POST' })
+            .then(r => {
+                if (r.ok) {
+                    sessionEnd = Date.now() + 24 * 3600 * 1000;
+                    localStorage.setItem(SESSION_KEY, sessionEnd);
+                    updateSessionTimer();
+                    const btn = document.querySelector('[title*="세션"]');
+                    btn.classList.add('text-emerald-400');
+                    setTimeout(() => btn.classList.remove('text-emerald-400'), 1500);
+                }
+            });
+    }
+
+    updateSessionTimer();
+    setInterval(updateSessionTimer, 1000);
+</script>

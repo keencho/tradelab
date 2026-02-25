@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Dashboard{% endblock %}
+
+{% block content %}
+<!-- 메트릭 카드 -->
+<div class="grid grid-cols-4 gap-4 mb-6">
+    <div class="bg-surface rounded-xl border border-slate-700 p-5">
+        <p class="text-xs text-slate-400 mb-1">총 자산</p>
+        <p class="text-2xl font-bold text-white">₩{{ "{:,.0f}".format(portfolio.total_asset) }}</p>
+        <p class="text-sm mt-1 text-emerald-400">+{{ portfolio.total_pnl_pct }}%</p>
+    </div>
+    <div class="bg-surface rounded-xl border border-slate-700 p-5">
+        <p class="text-xs text-slate-400 mb-1">일일 손익</p>
+        <p class="text-2xl font-bold text-emerald-400">+₩{{ "{:,.0f}".format(portfolio.daily_pnl) }}</p>
+        <p class="text-sm mt-1 text-emerald-400">+{{ portfolio.daily_pnl_pct }}%</p>
+    </div>
+    <div class="bg-surface rounded-xl border border-slate-700 p-5">
+        <p class="text-xs text-slate-400 mb-1">활성 시그널</p>
+        <p class="text-2xl font-bold text-white">{{ signals|length }}</p>
+        <p class="text-sm mt-1 text-amber-400">3 bullish · 2 bearish</p>
+    </div>
+    <div class="bg-surface rounded-xl border border-slate-700 p-5">
+        <p class="text-xs text-slate-400 mb-1">오늘 뉴스</p>
+        <p class="text-2xl font-bold text-white">{{ news|length }}</p>
+        <p class="text-sm mt-1 text-slate-400">긍정 4 · 부정 2 · 중립 1</p>
+    </div>
+</div>
+
+<!-- 수익률 차트 -->
+<div class="bg-surface rounded-xl border border-slate-700 p-5 mb-6">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-slate-300">포트폴리오 수익률</h2>
+        <div class="flex gap-3 text-xs">
+            <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 bg-sky-400 rounded"></span>내 포트폴리오</span>
+            <span class="flex items-center gap-1.5 text-slate-400"><span class="w-3 h-0.5 bg-slate-500 rounded"></span>벤치마크</span>
+        </div>
+    </div>
+    <div id="portfolio-chart" style="height: 280px;"></div>
+</div>
+
+<!-- 시그널 + 뉴스 -->
+<div class="grid grid-cols-2 gap-4">
+    <!-- 최근 시그널 -->
+    <div class="bg-surface rounded-xl border border-slate-700 p-5">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-semibold text-slate-300">최근 시그널</h2>
+            <a href="/signals" class="text-xs text-sky-400 hover:underline">전체 보기</a>
+        </div>
+        <div class="space-y-3">
+            {% for s in signals %}
+            <div class="flex items-start gap-3 p-3 rounded-lg bg-base/50">
+                {% if s.direction == 'bullish' %}
+                <span class="mt-0.5 w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                {% elif s.direction == 'bearish' %}
+                <span class="mt-0.5 w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
+                {% else %}
+                <span class="mt-0.5 w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
+                {% endif %}
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-semibold text-white">{{ s.ticker }}</span>
+                        <span class="text-xs text-slate-500">{{ s.type }}</span>
+                        <span class="ml-auto text-xs text-slate-500">{{ s.time }}</span>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-1 truncate">{{ s.desc }}</p>
+                </div>
+                <span class="text-xs font-medium px-2 py-0.5 rounded
+                    {% if s.confidence >= 0.8 %}bg-emerald-500/10 text-emerald-400
+                    {% elif s.confidence >= 0.6 %}bg-amber-500/10 text-amber-400
+                    {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                    {{ (s.confidence * 100)|int }}%
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- 최근 뉴스 -->
+    <div class="bg-surface rounded-xl border border-slate-700 p-5">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-semibold text-slate-300">최근 뉴스</h2>
+            <a href="/news" class="text-xs text-sky-400 hover:underline">전체 보기</a>
+        </div>
+        <div class="space-y-3">
+            {% for n in news %}
+            <div class="p-3 rounded-lg bg-base/50">
+                <div class="flex items-center gap-2 mb-1">
+                    {% if n.sentiment == 'positive' %}
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">긍정 {{ "%+.1f"|format(n.score) }}</span>
+                    {% elif n.sentiment == 'negative' %}
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">부정 {{ "%+.1f"|format(n.score) }}</span>
+                    {% else %}
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-400">중립 {{ "%+.1f"|format(n.score) }}</span>
+                    {% endif %}
+                    <span class="text-xs text-slate-500">영향도 {{ n.impact }}/10</span>
+                    <span class="ml-auto text-xs text-slate-500">{{ n.time }}</span>
+                </div>
+                <p class="text-sm text-white font-medium">{{ n.title }}</p>
+                <p class="text-xs text-slate-500 mt-1">{{ n.tickers }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+    const chartData = {{ chart | tojson }};
+    Plotly.newPlot('portfolio-chart', [
+        {
+            x: chartData.dates,
+            y: chartData.portfolio,
+            name: '내 포트폴리오',
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#38BDF8', width: 2 },
+            fill: 'tozeroy',
+            fillcolor: 'rgba(56, 189, 248, 0.05)',
+        },
+        {
+            x: chartData.dates,
+            y: chartData.benchmark,
+            name: '벤치마크',
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#475569', width: 1.5, dash: 'dot' },
+        }
+    ], {
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        font: { family: 'Pretendard', color: '#94A3B8', size: 11 },
+        margin: { l: 40, r: 20, t: 10, b: 30 },
+        xaxis: { gridcolor: '#1E293B', showgrid: true },
+        yaxis: { gridcolor: '#1E293B', showgrid: true, tickprefix: '₩', tickformat: ',.0f', ticksuffix: 'M' },
+        showlegend: false,
+        hovermode: 'x unified',
+    }, { responsive: true, displayModeBar: false });
+</script>
+{% endblock %}

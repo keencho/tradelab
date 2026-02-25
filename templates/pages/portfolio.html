@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Portfolio{% endblock %}
+
+{% block content %}
+<!-- 메트릭 카드 -->
+<div class="grid grid-cols-4 gap-4 mb-6">
+    <div class="bg-surface rounded-xl border border-slate-700 p-5">
+        <p class="text-xs text-slate-400 mb-1">총 자산</p>
+        <p class="text-2xl font-bold text-white">₩{{ "{:,.0f}".format(portfolio.total_asset) }}</p>
+    </div>
+    <div class="bg-surface rounded-xl border border-slate-700 p-5">
+        <p class="text-xs text-slate-400 mb-1">현금</p>
+        <p class="text-2xl font-bold text-white">₩{{ "{:,.0f}".format(portfolio.cash) }}</p>
+    </div>
+    <div class="bg-surface rounded-xl border border-slate-700 p-5">
+        <p class="text-xs text-slate-400 mb-1">투자금</p>
+        <p class="text-2xl font-bold text-white">₩{{ "{:,.0f}".format(portfolio.invested) }}</p>
+    </div>
+    <div class="bg-surface rounded-xl border border-slate-700 p-5">
+        <p class="text-xs text-slate-400 mb-1">총 수익률</p>
+        <p class="text-2xl font-bold text-emerald-400">+{{ portfolio.total_pnl_pct }}%</p>
+    </div>
+</div>
+
+<div class="grid grid-cols-3 gap-4 mb-6">
+    <!-- 보유 포지션 (2칸) -->
+    <div class="col-span-2 bg-surface rounded-xl border border-slate-700 p-5">
+        <h2 class="text-sm font-semibold text-slate-300 mb-4">보유 포지션</h2>
+        <table class="w-full">
+            <thead>
+                <tr class="text-xs text-slate-500 border-b border-slate-700">
+                    <th class="text-left pb-3 font-medium">종목</th>
+                    <th class="text-right pb-3 font-medium">수량</th>
+                    <th class="text-right pb-3 font-medium">평균단가</th>
+                    <th class="text-right pb-3 font-medium">현재가</th>
+                    <th class="text-right pb-3 font-medium">손익</th>
+                    <th class="text-right pb-3 font-medium">수익률</th>
+                    <th class="text-right pb-3 font-medium">비중</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in portfolio.positions %}
+                <tr class="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors">
+                    <td class="py-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-semibold text-white">{{ p.ticker }}</span>
+                            <span class="text-xs px-1.5 py-0.5 rounded
+                                {% if p.market == 'crypto' %}bg-amber-500/10 text-amber-400
+                                {% else %}bg-sky-500/10 text-sky-400{% endif %}">
+                                {{ p.market }}
+                            </span>
+                        </div>
+                    </td>
+                    <td class="py-3 text-right text-sm text-slate-300">{{ p.qty }}</td>
+                    <td class="py-3 text-right text-sm text-slate-300">{{ "{:,.2f}".format(p.avg_price) }}</td>
+                    <td class="py-3 text-right text-sm text-white font-medium">{{ "{:,.2f}".format(p.current_price) }}</td>
+                    <td class="py-3 text-right text-sm font-medium
+                        {% if p.pnl_amount >= 0 %}text-emerald-400{% else %}text-red-400{% endif %}">
+                        {{ "{:+,.0f}".format(p.pnl_amount) }}
+                    </td>
+                    <td class="py-3 text-right text-sm font-medium
+                        {% if p.pnl_pct >= 0 %}text-emerald-400{% else %}text-red-400{% endif %}">
+                        {{ "{:+.2f}".format(p.pnl_pct) }}%
+                    </td>
+                    <td class="py-3 text-right">
+                        <div class="flex items-center justify-end gap-2">
+                            <div class="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                <div class="h-full bg-sky-400/60 rounded-full" style="width: {{ p.weight }}%"></div>
+                            </div>
+                            <span class="text-xs text-slate-400 w-10 text-right">{{ p.weight }}%</span>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 매매 폼 (1칸) -->
+    <div class="bg-surface rounded-xl border border-slate-700 p-5">
+        <h2 class="text-sm font-semibold text-slate-300 mb-4">가상매매</h2>
+        <form class="space-y-4">
+            <div>
+                <label class="text-xs text-slate-400 block mb-1.5">종목 코드</label>
+                <input type="text" placeholder="NVDA, BTC/USDT ..."
+                    class="w-full bg-base border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none">
+            </div>
+            <div>
+                <label class="text-xs text-slate-400 block mb-1.5">수량</label>
+                <input type="number" placeholder="0"
+                    class="w-full bg-base border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <button type="button" class="w-full py-2.5 rounded-lg text-sm font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors">
+                    매수
+                </button>
+                <button type="button" class="w-full py-2.5 rounded-lg text-sm font-semibold bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors">
+                    매도
+                </button>
+            </div>
+        </form>
+
+        <!-- 현금 잔고 -->
+        <div class="mt-6 pt-4 border-t border-slate-700">
+            <div class="flex justify-between text-sm">
+                <span class="text-slate-400">가용 현금</span>
+                <span class="text-white font-medium">₩{{ "{:,.0f}".format(portfolio.cash) }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 거래 히스토리 -->
+<div class="bg-surface rounded-xl border border-slate-700 p-5">
+    <h2 class="text-sm font-semibold text-slate-300 mb-4">거래 히스토리</h2>
+    <table class="w-full">
+        <thead>
+            <tr class="text-xs text-slate-500 border-b border-slate-700">
+                <th class="text-left pb-3 font-medium">시간</th>
+                <th class="text-left pb-3 font-medium">종목</th>
+                <th class="text-left pb-3 font-medium">구분</th>
+                <th class="text-right pb-3 font-medium">수량</th>
+                <th class="text-right pb-3 font-medium">가격</th>
+                <th class="text-right pb-3 font-medium">수수료</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in portfolio.trades %}
+            <tr class="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors">
+                <td class="py-3 text-sm text-slate-400">{{ t.time }}</td>
+                <td class="py-3 text-sm text-white font-medium">{{ t.ticker }}</td>
+                <td class="py-3">
+                    {% if t.side == 'buy' %}
+                    <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400">매수</span>
+                    {% else %}
+                    <span class="text-xs px-2 py-0.5 rounded bg-red-500/10 text-red-400">매도</span>
+                    {% endif %}
+                </td>
+                <td class="py-3 text-right text-sm text-slate-300">{{ t.qty }}</td>
+                <td class="py-3 text-right text-sm text-white">{{ "{:,.2f}".format(t.price) }}</td>
+                <td class="py-3 text-right text-sm text-slate-500">₩{{ "{:,.0f}".format(t.fee) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

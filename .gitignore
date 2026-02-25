@@ -12,15 +12,21 @@ env/
 # DB
 *.db
 
-# API keys
+# Env (공통 + 환경별 전부)
 .env
-config.local.py
+.env.local
+.env.server
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+
+# Deploy
+*.pem
+*.key
+deploy.ps1
 
 # OS
 Thumbs.db
@@ -29,6 +35,9 @@ Desktop.ini
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Logs
+logs/
 
 # Data cache
 data/cache/

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title_suffix %} — News{% endblock %}
+
+{% block content %}
+<!-- 필터 -->
+<div class="flex items-center gap-3 mb-6">
+    <button class="px-4 py-2 text-sm rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">전체</button>
+    <button class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">
+        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span>긍정
+    </button>
+    <button class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">
+        <span class="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5"></span>부정
+    </button>
+    <button class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">
+        <span class="inline-block w-2 h-2 rounded-full bg-slate-400 mr-1.5"></span>중립
+    </button>
+    <div class="ml-auto">
+        <input type="text" placeholder="종목/키워드 검색..."
+            class="bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none w-48">
+    </div>
+</div>
+
+<!-- 뉴스 카드 -->
+<div class="space-y-3">
+    {% for n in news %}
+    <div class="bg-surface rounded-xl border border-slate-700 p-5 hover:border-slate-600 transition-colors">
+        <div class="flex items-start gap-4">
+            <!-- 센티멘트 뱃지 -->
+            <div class="shrink-0 mt-0.5">
+                {% if n.sentiment == 'positive' %}
+                <div class="w-12 h-12 rounded-lg bg-emerald-500/10 flex flex-col items-center justify-center">
+                    <span class="text-xs text-emerald-400 font-bold">{{ "%+.1f"|format(n.score) }}</span>
+                    <span class="text-[10px] text-emerald-400/60">긍정</span>
+                </div>
+                {% elif n.sentiment == 'negative' %}
+                <div class="w-12 h-12 rounded-lg bg-red-500/10 flex flex-col items-center justify-center">
+                    <span class="text-xs text-red-400 font-bold">{{ "%+.1f"|format(n.score) }}</span>
+                    <span class="text-[10px] text-red-400/60">부정</span>
+                </div>
+                {% else %}
+                <div class="w-12 h-12 rounded-lg bg-slate-700/50 flex flex-col items-center justify-center">
+                    <span class="text-xs text-slate-400 font-bold">{{ "%+.1f"|format(n.score) }}</span>
+                    <span class="text-[10px] text-slate-400/60">중립</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- 내용 -->
+            <div class="flex-1 min-w-0">
+                <h3 class="text-sm font-semibold text-white mb-1.5">{{ n.title }}</h3>
+                <p class="text-xs text-slate-400 leading-relaxed mb-2">{{ n.summary }}</p>
+                <div class="flex items-center gap-3">
+                    <!-- 관련 종목 태그 -->
+                    {% for ticker in n.tickers.split(', ') %}
+                    <span class="text-xs px-2 py-0.5 rounded bg-slate-700/50 text-slate-300">{{ ticker }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- 우측 정보 -->
+            <div class="text-right shrink-0">
+                <div class="text-xs text-slate-500 mb-2">{{ n.time }}</div>
+                <!-- 영향도 -->
+                <div class="flex items-center gap-1 justify-end">
+                    <span class="text-xs text-slate-500">영향도</span>
+                    <div class="flex gap-0.5">
+                        {% for i in range(10) %}
+                        <div class="w-1.5 h-3 rounded-sm
+                            {% if i < n.impact %}
+                                {% if n.impact >= 8 %}bg-emerald-500
+                                {% elif n.impact >= 5 %}bg-amber-500
+                                {% else %}bg-slate-500{% endif %}
+                            {% else %}bg-slate-700{% endif %}">
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <span class="text-xs font-medium
+                        {% if n.impact >= 8 %}text-emerald-400
+                        {% elif n.impact >= 5 %}text-amber-400
+                        {% else %}text-slate-400{% endif %}">
+                        {{ n.impact }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
