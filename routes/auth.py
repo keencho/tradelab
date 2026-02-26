@@ -46,18 +46,16 @@ def _get_client_ip(request: Request) -> str:
 
 
 def _send_telegram(message: str):
-    """Telegram 알림 전송 (비동기 불필요 — fire and forget)."""
+    """Telegram 알림 전송."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        logger.warning("Telegram credentials not set, skipping notification")
         return
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         data = urlencode({"chat_id": TELEGRAM_CHAT_ID, "text": message}).encode()
         req = UrlRequest(url, data=data, method="POST")
         urlopen(req, timeout=5)
-        logger.info("Telegram notification sent")
-    except Exception as e:
-        logger.error(f"Telegram send failed: {e}")
+    except Exception:
+        pass
 
 
 def require_auth(request: Request) -> bool:
@@ -97,7 +95,7 @@ def create_session(request: Request, response: Response):
     )
 
     ip = _get_client_ip(request)
-    logger.info(f"Login: {AUTH_USERNAME} / IP: {ip}")
+    logger.info(f"Login OK / user: {AUTH_USERNAME} / IP: {ip}")
     _send_telegram(f"[TradeLab] Login\nUser: {AUTH_USERNAME}\nIP: {ip}")
 
 
@@ -108,3 +106,10 @@ def reset_session(request: Request, response: Response):
         del _sessions[old_token]
 
     create_session(request, response)
+
+
+def logout(request: Request):
+    """세션 삭제."""
+    token = request.cookies.get(COOKIE_NAME)
+    if token and token in _sessions:
+        del _sessions[token]

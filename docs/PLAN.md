@@ -419,34 +419,40 @@ AI 해석 (Gemini)
 
 ## 구현 순서
 
-### Phase 1: 기반 + UI 셸
-- [ ] 프로젝트 구조 갈아엎기 (Streamlit → FastAPI)
-- [ ] requirements.txt 업데이트
-- [ ] FastAPI 앱 세팅 (main.py, routes)
-- [ ] Jinja2 공통 레이아웃 (base.html, sidebar.html, header.html)
-- [ ] TailwindCSS + Pretendard + HTMX CDN 연결
-- [ ] 5개 페이지 기본 구조 (mock 데이터로 꽉 채움)
-- [ ] 다크 테마 적용
-- [ ] DB 모델 유지 (기존 것 재사용)
+### Phase 1: 기반 + UI 셸 ✅
+- [x] 프로젝트 구조 (FastAPI + Jinja2 + TailwindCSS + HTMX)
+- [x] requirements.txt
+- [x] FastAPI 앱 세팅 (main.py, routes)
+- [x] Jinja2 공통 레이아웃 (base.html, sidebar.html, header.html)
+- [x] TailwindCSS + Pretendard + HTMX + Plotly.js CDN 연결
+- [x] 5개 페이지 기본 구조 (mock 데이터)
+- [x] 다크 테마 적용
+- [x] DB 모델 (SQLAlchemy)
+- [x] 환경 분리 (.env / .env.local / .env.server)
+- [x] 배포 스크립트 (deploy.ps1)
+- [x] HTTP Basic Auth + 쿠키 세션 (24h)
+- [x] Telegram 로그인 알림
+- [x] 로깅 시스템 (파일 + 콘솔, 30일 보관)
+- [x] Favicon (TL 모노그램)
 
-### Phase 2: 가상매매
-- [ ] 포트폴리오 엔진 (매수/매도/P&L)
-- [ ] 매매 폼 (HTMX POST)
-- [ ] 포트폴리오 페이지 (보유종목, 수익률 차트)
-- [ ] 거래 히스토리 테이블
-
-### Phase 3: 뉴스 + 센티멘트
+### Phase 2: 뉴스 + 센티멘트
 - [ ] 뉴스 수집 파이프라인 (NewsAPI)
 - [ ] Gemini API 센티멘트 분석 연동
-- [ ] 뉴스 페이지 (센티멘트 점수 + 필터)
+- [ ] 뉴스 페이지 실데이터 연결 (센티멘트 점수 + 필터)
 - [ ] 종목별 센티멘트 추이 차트
 
-### Phase 4: 선행 시그널
+### Phase 3: 선행 시그널
 - [ ] 온체인 데이터 수집 (고래 추적)
 - [ ] SEC EDGAR / DART 내부자 매매 수집
 - [ ] 소셜 버즈 모니터링 (Reddit)
 - [ ] 이상 탐지 알고리즘 (z-score)
 - [ ] 시그널 페이지 + AI 해석
+
+### Phase 4: 가상매매
+- [ ] 포트폴리오 엔진 (매수/매도/P&L)
+- [ ] 매매 폼 (HTMX POST)
+- [ ] 포트폴리오 페이지 (보유종목, 수익률 차트)
+- [ ] 거래 히스토리 테이블
 
 ### Phase 5: AI 리서치 + 마무리
 - [ ] 종목 검색 → 자동 데이터 수집
@@ -472,11 +478,35 @@ AI 해석 (Gemini)
 
 ---
 
+## 로깅 규칙
+
+**최대한 로깅 자제. 꼭 필요한 것만.**
+
+| 로깅 대상 | 레벨 | 비고 |
+|-----------|------|------|
+| 로그인 성공 | `INFO` | 유저명 + IP |
+| 로그인 실패 | `WARNING` | 시도한 유저명 + IP |
+| 에러/예외 | `ERROR` | 스택트레이스 포함 |
+
+로깅하지 않는 것:
+- 페이지 접속 (uvicorn access log로 충분)
+- 로그아웃
+- 세션 리셋
+- Telegram 전송 성공/실패
+- 정상적인 API 호출
+
+설정:
+- 파일: `logs/app.log` (일 단위 로테이션, 30일 보관)
+- 로컬: DEBUG / 서버: INFO
+- 콘솔 + 파일 동시 출력
+
+---
+
 ## 메모
 
 - 비용: **완전 무료** (모든 서비스 무료 티어 사용)
 - 코드 퀄리티 신경 씀 (읽기 좋게, 구조 깔끔하게)
-- 로그인/인증 없음
+- 인증: HTTP Basic Auth + 쿠키 세션 (24h), 로컬에서는 비활성화
 - 실매매 연동 없음 (가상매매 only)
 - 서버: Ubuntu (배포는 별도 진행)
 - LLM: Gemini Flash 메인, Groq (Llama 3) 백업

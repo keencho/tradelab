@@ -2,11 +2,12 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from config import AUTH_ENABLED
-from routes.auth import require_auth, create_session, COOKIE_NAME
+from config import AUTH_ENABLED, get_logger
+from routes.auth import require_auth, create_session, COOKIE_NAME, _get_client_ip
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
+logger = get_logger("auth")
 
 
 # ── Mock 데이터 ──────────────────────────────────────────────
@@ -72,6 +73,18 @@ def _auth_or_401(request: Request) -> Response | None:
         return None
     if require_auth(request):
         return None
+
+    auth_header = request.headers.get("authorization")
+    if auth_header:
+        ip = _get_client_ip(request)
+        import base64
+        try:
+            decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+            username = decoded.split(":", 1)[0]
+        except Exception:
+            username = "unknown"
+        logger.warning(f"Login FAILED / user: {username} / IP: {ip}")
+
     return Response(
         status_code=401,
         headers={"WWW-Authenticate": "Basic realm='TradeLab'"},
