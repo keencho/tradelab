@@ -8,16 +8,17 @@
         </button>
         <h1 class="text-lg font-semibold text-white">
             {% block page_title %}
-            {% if page == 'dashboard' %}Dashboard
-            {% elif page == 'portfolio' %}Portfolio
-            {% elif page == 'research' %}Research
-            {% elif page == 'signals' %}Signals
-            {% elif page == 'news' %}News
+            {% if page == 'dashboard' %}대시보드
+            {% elif page == 'portfolio' %}포트폴리오
+            {% elif page == 'research' %}리서치
+            {% elif page == 'signals' %}시그널
+            {% elif page == 'news' %}뉴스
             {% endif %}
             {% endblock %}
         </h1>
     </div>
 
+    {% if auth_enabled %}
     <div class="flex items-center gap-3">
         <!-- 세션 남은시간 -->
         <span class="text-xs text-slate-500 hidden sm:inline" id="session-timer"></span>
@@ -36,8 +37,10 @@
             </svg>
         </button>
     </div>
+    {% endif %}
 </header>
 
+{% if auth_enabled %}
 <script>
     const SESSION_KEY = 'tl_session_end';
     let sessionEnd = parseInt(localStorage.getItem(SESSION_KEY));
@@ -86,3 +89,4 @@
     updateSessionTimer();
     setInterval(updateSessionTimer, 1000);
 </script>
+{% endif %}

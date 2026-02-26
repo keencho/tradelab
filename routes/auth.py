@@ -8,15 +8,15 @@ from fastapi import Request, Response, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from config import (
-    AUTH_ENABLED, AUTH_USERNAME, AUTH_PASSWORD, SESSION_EXPIRE_HOURS,
+    AUTH_ENABLED, AUTH_USERS, SESSION_EXPIRE_HOURS,
     TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, get_logger,
 )
 
 logger = get_logger("auth")
 
 COOKIE_NAME = "tl_session"
-# token -> expire_timestamp
-_sessions: dict[str, float] = {}
+# token -> (expire_timestamp, username)
+_sessions: dict[str, tuple[float, str]] = {}
 
 
 def _make_token() -> str:
@@ -32,7 +32,8 @@ def _check_cookie(request: Request) -> bool:
     token = request.cookies.get(COOKIE_NAME)
     if not token or token not in _sessions:
         return False
-    if time.time() > _sessions[token]:
+    expire, _ = _sessions[token]
+    if time.time() > expire:
         del _sessions[token]
         return False
     return True
@@ -75,16 +76,30 @@ def require_auth(request: Request) -> bool:
     except Exception:
         return False
 
-    if username == AUTH_USERNAME and password == AUTH_PASSWORD:
+    if username in AUTH_USERS and AUTH_USERS[username] == password:
         return True
 
     return False
 
 
+def _get_username(request: Request) -> str:
+    """Basic Auth 헤더에서 유저명 추출."""
+    import base64
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Basic "):
+        try:
+            decoded = base64.b64decode(auth[6:]).decode("utf-8")
+            return decoded.split(":", 1)[0]
+        except Exception:
+            pass
+    return "unknown"
+
+
 def create_session(request: Request, response: Response):
     """세션 생성 + 쿠키 설정 + Telegram 알림."""
+    username = _get_username(request)
     token = _make_token()
-    _sessions[token] = time.time() + _session_ttl()
+    _sessions[token] = (time.time() + _session_ttl(), username)
 
     response.set_cookie(
         key=COOKIE_NAME,
@@ -95,9 +110,9 @@ def create_session(request: Request, response: Response):
     )
 
     ip = _get_client_ip(request)
-    logger.info(f"Login OK / user: {AUTH_USERNAME} / IP: {ip}")
+    logger.info(f"Login OK / user: {username} / IP: {ip}")
     if AUTH_ENABLED:
-        _send_telegram(f"[TradeLab] Login\nUser: {AUTH_USERNAME}\nIP: {ip}")
+        _send_telegram(f"[TradeLab] Login\nUser: {username}\nIP: {ip}")
 
 
 def reset_session(request: Request, response: Response):

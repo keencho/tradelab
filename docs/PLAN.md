@@ -435,14 +435,16 @@ AI 해석 (Gemini)
 - [x] 로깅 시스템 (파일 + 콘솔, 30일 보관)
 - [x] Favicon (TL 모노그램)
 
-### Phase 2: 뉴스 + 센티멘트
-- [ ] DB 테이블 (news)
-- [ ] 뉴스 수집 파이프라인 (RSS + Finnhub + CryptoPanic)
-- [ ] LLM 센티멘트 분석 (Gemini → Groq → Cerebras 폴백)
-- [ ] 뉴스 페이지 실데이터 연결 (센티멘트 점수 + 필터)
-- [ ] 대시보드 최근 뉴스 실데이터 연결
+### Phase 2: 뉴스 + 센티멘트 ✅
+- [x] DB 테이블 (news) + URL unique 제약
+- [x] 뉴스 수집 파이프라인 (RSS + Finnhub)
+- [x] LLM 센티멘트 분석 (Gemini → Groq → Cerebras 폴백 + 429 재시도)
+- [x] 영문 뉴스 한국어 번역 요약
+- [x] 시간대 KST 저장
+- [x] 뉴스 페이지 실데이터 연결 (센티멘트/카테고리/영향도/날짜/검색 필터 + 페이징)
+- [x] 대시보드 최근 뉴스 실데이터 + 통계
+- [x] cron 스크립트 (collect_news.py, 30분 주기)
 - [ ] 종목별 센티멘트 추이 차트
-- [ ] cron 스크립트 (collect_news.py)
 
 ### Phase 3: 선행 시그널 + 매크로
 - [ ] 온체인 데이터 수집 — 고래 추적 (Etherscan)

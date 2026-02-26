@@ -102,6 +102,7 @@ def _page_response(request: Request, template: str, context: dict) -> Response:
     if denied:
         return denied
 
+    context["auth_enabled"] = AUTH_ENABLED
     response = templates.TemplateResponse(template, context)
 
     # 쿠키 없으면 새 세션 발급 (Basic Auth로 최초 통과한 경우)

@@ -1,6 +1,7 @@
 import os
 import logging
 from datetime import timezone, timedelta
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -45,9 +46,15 @@ DART_API_KEY = os.getenv("DART_API_KEY", "")
 
 # --- 인증 ---
 AUTH_ENABLED = env != "local"  # 로컬에서는 인증 비활성화
-AUTH_USERNAME = os.getenv("AUTH_USERNAME", "admin")
-AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "admin")
 SESSION_EXPIRE_HOURS = 24
+
+# AUTH_USERS 형식: "user1:pw1,user2:pw2"
+_raw_users = os.getenv("AUTH_USERS", "admin:admin")
+AUTH_USERS: dict[str, str] = {}
+for pair in _raw_users.split(","):
+    if ":" in pair:
+        u, p = pair.strip().split(":", 1)
+        AUTH_USERS[u] = p
 
 # --- 가상매매 ---
 DEFAULT_CAPITAL = 100_000_000  # 1억원
@@ -74,11 +81,19 @@ def get_logger(name: str) -> logging.Logger:
     logger.setLevel(LOG_LEVEL)
     formatter = logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
 
-    # 파일 핸들러: 단순 append (Windows 로테이션 잠금 문제 회피)
-    file_handler = logging.FileHandler(
-        LOG_DIR / "app.log",
-        encoding="utf-8",
-    )
+    # 파일 핸들러: 서버는 일별 로테이션(30일 보관), 로컬은 단순 append
+    if env == "server":
+        file_handler = TimedRotatingFileHandler(
+            LOG_DIR / "app.log",
+            when="midnight",
+            backupCount=30,
+            encoding="utf-8",
+        )
+    else:
+        file_handler = logging.FileHandler(
+            LOG_DIR / "app.log",
+            encoding="utf-8",
+        )
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
