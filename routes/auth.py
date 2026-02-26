@@ -8,7 +8,7 @@ from fastapi import Request, Response, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from config import (
-    AUTH_USERNAME, AUTH_PASSWORD, SESSION_EXPIRE_HOURS,
+    AUTH_ENABLED, AUTH_USERNAME, AUTH_PASSWORD, SESSION_EXPIRE_HOURS,
     TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, get_logger,
 )
 
@@ -96,7 +96,8 @@ def create_session(request: Request, response: Response):
 
     ip = _get_client_ip(request)
     logger.info(f"Login OK / user: {AUTH_USERNAME} / IP: {ip}")
-    _send_telegram(f"[TradeLab] Login\nUser: {AUTH_USERNAME}\nIP: {ip}")
+    if AUTH_ENABLED:
+        _send_telegram(f"[TradeLab] Login\nUser: {AUTH_USERNAME}\nIP: {ip}")
 
 
 def reset_session(request: Request, response: Response):

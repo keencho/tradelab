@@ -1,8 +1,13 @@
+import math
+
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func, or_
 
 from config import AUTH_ENABLED, get_logger
+from db.database import SessionLocal
+from db.models import News
 from routes.auth import require_auth, create_session, COOKIE_NAME, _get_client_ip
 
 router = APIRouter()
@@ -110,14 +115,35 @@ def _page_response(request: Request, template: str, context: dict) -> Response:
 
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    return _page_response(request, "pages/dashboard.html", {
-        "request": request,
-        "page": "dashboard",
-        "portfolio": MOCK_PORTFOLIO,
-        "signals": MOCK_SIGNALS[:5],
-        "news": MOCK_NEWS[:5],
-        "chart": MOCK_CHART_DATA,
-    })
+    session = SessionLocal()
+    try:
+        recent_news = (
+            session.query(News)
+            .order_by(News.published_at.desc())
+            .limit(5)
+            .all()
+        )
+        news_total = session.query(News).count()
+        news_positive = session.query(News).filter(News.sentiment_label == "positive").count()
+        news_negative = session.query(News).filter(News.sentiment_label == "negative").count()
+        news_neutral = news_total - news_positive - news_negative
+
+        return _page_response(request, "pages/dashboard.html", {
+            "request": request,
+            "page": "dashboard",
+            "portfolio": MOCK_PORTFOLIO,
+            "signals": MOCK_SIGNALS[:5],
+            "news": recent_news,
+            "news_stats": {
+                "total": news_total,
+                "positive": news_positive,
+                "negative": news_negative,
+                "neutral": news_neutral,
+            },
+            "chart": MOCK_CHART_DATA,
+        })
+    finally:
+        session.close()
 
 
 @router.get("/portfolio", response_class=HTMLResponse)
@@ -146,10 +172,88 @@ async def signals(request: Request):
     })
 
 
+NEWS_PER_PAGE = 20
+
+# 소스 → 카테고리 매핑
+SOURCE_CATEGORIES = {
+    "stock": ["한국경제 증권", "파이낸셜 증권", "finnhub_general", "finnhub_company"],
+    "crypto": ["CoinDesk", "CoinTelegraph", "파이낸셜 블록체인", "finnhub_crypto"],
+    "economy": ["한국경제 경제", "파이낸셜 경제"],
+}
+
+
 @router.get("/news", response_class=HTMLResponse)
 async def news(request: Request):
-    return _page_response(request, "pages/news.html", {
-        "request": request,
-        "page": "news",
-        "news": MOCK_NEWS,
-    })
+    page = int(request.query_params.get("page", 1))
+    sentiment = request.query_params.get("sentiment", "")
+    search = request.query_params.get("q", "").strip()
+    category = request.query_params.get("category", "")  # stock/crypto/economy
+    impact_min = request.query_params.get("impact", "")   # 1~10
+    date_from = request.query_params.get("from", "")       # YYYY-MM-DD
+    date_to = request.query_params.get("to", "")           # YYYY-MM-DD
+
+    session = SessionLocal()
+    try:
+        query = session.query(News)
+
+        if sentiment in ("positive", "negative", "neutral"):
+            query = query.filter(News.sentiment_label == sentiment)
+
+        if category in SOURCE_CATEGORIES:
+            query = query.filter(News.source.in_(SOURCE_CATEGORIES[category]))
+
+        if impact_min.isdigit():
+            query = query.filter(News.impact >= int(impact_min))
+
+        if date_from:
+            try:
+                from datetime import datetime
+                dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+                query = query.filter(News.published_at >= dt_from)
+            except ValueError:
+                pass
+
+        if date_to:
+            try:
+                from datetime import datetime, timedelta
+                dt_to = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+                query = query.filter(News.published_at < dt_to)
+            except ValueError:
+                pass
+
+        if search:
+            query = query.filter(
+                or_(
+                    News.title.ilike(f"%{search}%"),
+                    News.summary.ilike(f"%{search}%"),
+                    News.related_tickers.ilike(f"%{search}%"),
+                )
+            )
+
+        total = query.count()
+        total_pages = max(1, math.ceil(total / NEWS_PER_PAGE))
+        page = max(1, min(page, total_pages))
+
+        news_list = (
+            query.order_by(News.published_at.desc())
+            .offset((page - 1) * NEWS_PER_PAGE)
+            .limit(NEWS_PER_PAGE)
+            .all()
+        )
+
+        return _page_response(request, "pages/news.html", {
+            "request": request,
+            "page": "news",
+            "news": news_list,
+            "current_page": page,
+            "total_pages": total_pages,
+            "total_count": total,
+            "sentiment_filter": sentiment,
+            "search_query": search,
+            "category_filter": category,
+            "impact_filter": impact_min,
+            "date_from": date_from,
+            "date_to": date_to,
+        })
+    finally:
+        session.close()

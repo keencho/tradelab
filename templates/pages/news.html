@@ -1,45 +1,149 @@
 {% extends "base.html" %}
 {% block title_suffix %} — News{% endblock %}
 
+{# 필터 유지 query string 빌더 #}
+{% macro qs(overrides={}) %}
+{%- set params = {} -%}
+{%- if sentiment_filter and 'sentiment' not in overrides %}{% set _ = params.update({'sentiment': sentiment_filter}) %}{% endif -%}
+{%- if category_filter and 'category' not in overrides %}{% set _ = params.update({'category': category_filter}) %}{% endif -%}
+{%- if impact_filter and 'impact' not in overrides %}{% set _ = params.update({'impact': impact_filter}) %}{% endif -%}
+{%- if date_from and 'from' not in overrides %}{% set _ = params.update({'from': date_from}) %}{% endif -%}
+{%- if date_to and 'to' not in overrides %}{% set _ = params.update({'to': date_to}) %}{% endif -%}
+{%- if search_query and 'q' not in overrides %}{% set _ = params.update({'q': search_query}) %}{% endif -%}
+{%- set _ = params.update(overrides) -%}
+{%- set parts = [] -%}
+{%- for k, v in params.items() if v %}{% set _ = parts.append(k ~ '=' ~ v) %}{% endfor -%}
+{%- if parts %}?{{ parts|join('&') }}{% endif -%}
+{% endmacro %}
+
 {% block content %}
-<!-- 필터 -->
-<div class="flex flex-wrap items-center gap-2 lg:gap-3 mb-6">
-    <button class="px-4 py-2 text-sm rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">전체</button>
-    <button class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">
-        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span>긍정
-    </button>
-    <button class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">
-        <span class="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5"></span>부정
-    </button>
-    <button class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">
-        <span class="inline-block w-2 h-2 rounded-full bg-slate-400 mr-1.5"></span>중립
-    </button>
+<!-- 1행: 센티멘트 필터 + 검색 -->
+<div class="flex flex-wrap items-center gap-2 lg:gap-3 mb-3">
+    <a href="/news{{ qs({'sentiment': ''}) }}"
+        class="px-4 py-2 text-sm rounded-lg font-medium transition-colors
+        {% if not sentiment_filter %}bg-sky-500/10 text-sky-400 border border-sky-500/20
+        {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50{% endif %}">전체</a>
+    <a href="/news{{ qs({'sentiment': 'positive', 'page': ''}) }}"
+        class="px-4 py-2 text-sm rounded-lg transition-colors
+        {% if sentiment_filter == 'positive' %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium
+        {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50{% endif %}">
+        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span>긍정</a>
+    <a href="/news{{ qs({'sentiment': 'negative', 'page': ''}) }}"
+        class="px-4 py-2 text-sm rounded-lg transition-colors
+        {% if sentiment_filter == 'negative' %}bg-red-500/10 text-red-400 border border-red-500/20 font-medium
+        {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50{% endif %}">
+        <span class="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5"></span>부정</a>
+    <a href="/news{{ qs({'sentiment': 'neutral', 'page': ''}) }}"
+        class="px-4 py-2 text-sm rounded-lg transition-colors
+        {% if sentiment_filter == 'neutral' %}bg-slate-500/10 text-slate-300 border border-slate-500/20 font-medium
+        {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50{% endif %}">
+        <span class="inline-block w-2 h-2 rounded-full bg-slate-400 mr-1.5"></span>중립</a>
     <div class="w-full sm:w-auto sm:ml-auto">
-        <input type="text" placeholder="종목/키워드 검색..."
-            class="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none sm:w-48">
+        <form method="get" action="/news" class="flex gap-2">
+            {% if sentiment_filter %}<input type="hidden" name="sentiment" value="{{ sentiment_filter }}">{% endif %}
+            {% if category_filter %}<input type="hidden" name="category" value="{{ category_filter }}">{% endif %}
+            {% if impact_filter %}<input type="hidden" name="impact" value="{{ impact_filter }}">{% endif %}
+            {% if date_from %}<input type="hidden" name="from" value="{{ date_from }}">{% endif %}
+            {% if date_to %}<input type="hidden" name="to" value="{{ date_to }}">{% endif %}
+            <input type="text" name="q" value="{{ search_query }}" placeholder="종목/키워드 검색..."
+                class="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none sm:w-48">
+            <button type="submit" class="px-3 py-2 text-sm rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 transition-colors shrink-0">검색</button>
+        </form>
     </div>
+</div>
+
+<!-- 2행: 카테고리 + 영향도 + 날짜 -->
+<div class="flex flex-wrap items-center gap-2 lg:gap-3 mb-4">
+    <!-- 카테고리 -->
+    <div class="flex items-center gap-1.5">
+        <span class="text-xs text-slate-500 mr-1">분야</span>
+        <a href="/news{{ qs({'category': '', 'page': ''}) }}"
+            class="px-3 py-1.5 text-xs rounded-lg transition-colors
+            {% if not category_filter %}bg-sky-500/10 text-sky-400 border border-sky-500/20
+            {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700{% endif %}">전체</a>
+        <a href="/news{{ qs({'category': 'stock', 'page': ''}) }}"
+            class="px-3 py-1.5 text-xs rounded-lg transition-colors
+            {% if category_filter == 'stock' %}bg-blue-500/10 text-blue-400 border border-blue-500/20
+            {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700{% endif %}">주식</a>
+        <a href="/news{{ qs({'category': 'crypto', 'page': ''}) }}"
+            class="px-3 py-1.5 text-xs rounded-lg transition-colors
+            {% if category_filter == 'crypto' %}bg-amber-500/10 text-amber-400 border border-amber-500/20
+            {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700{% endif %}">코인</a>
+        <a href="/news{{ qs({'category': 'economy', 'page': ''}) }}"
+            class="px-3 py-1.5 text-xs rounded-lg transition-colors
+            {% if category_filter == 'economy' %}bg-purple-500/10 text-purple-400 border border-purple-500/20
+            {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700{% endif %}">경제</a>
+    </div>
+
+    <div class="hidden sm:block w-px h-5 bg-slate-700"></div>
+
+    <!-- 영향도 -->
+    <div class="flex items-center gap-1.5">
+        <span class="text-xs text-slate-500 mr-1">영향도</span>
+        <a href="/news{{ qs({'impact': '', 'page': ''}) }}"
+            class="px-3 py-1.5 text-xs rounded-lg transition-colors
+            {% if not impact_filter %}bg-sky-500/10 text-sky-400 border border-sky-500/20
+            {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700{% endif %}">전체</a>
+        <a href="/news{{ qs({'impact': '8', 'page': ''}) }}"
+            class="px-3 py-1.5 text-xs rounded-lg transition-colors
+            {% if impact_filter == '8' %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
+            {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700{% endif %}">8+</a>
+        <a href="/news{{ qs({'impact': '5', 'page': ''}) }}"
+            class="px-3 py-1.5 text-xs rounded-lg transition-colors
+            {% if impact_filter == '5' %}bg-amber-500/10 text-amber-400 border border-amber-500/20
+            {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700{% endif %}">5+</a>
+    </div>
+
+    <div class="hidden sm:block w-px h-5 bg-slate-700"></div>
+
+    <!-- 날짜 -->
+    <div class="flex items-center gap-1.5">
+        <span class="text-xs text-slate-500 mr-1">기간</span>
+        <input type="date" id="date-from" value="{{ date_from }}"
+            class="bg-surface border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none">
+        <span class="text-xs text-slate-500">~</span>
+        <input type="date" id="date-to" value="{{ date_to }}"
+            class="bg-surface border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none">
+        <button id="date-apply" class="px-2 py-1.5 text-xs rounded-lg text-sky-400 hover:bg-sky-500/10 border border-slate-700 transition-colors">적용</button>
+        {% if date_from or date_to %}
+        <a href="/news{{ qs({'from': '', 'to': '', 'page': ''}) }}" class="px-2 py-1.5 text-xs text-slate-500 hover:text-red-400 transition-colors">초기화</a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 결과 카운트 + 활성 필터 표시 -->
+<div class="flex items-center justify-between mb-4">
+    <p class="text-xs text-slate-500">
+        {% if search_query %}「{{ search_query }}」 {% endif %}
+        총 {{ total_count }}건
+        {% if total_pages > 1 %} · {{ current_page }}/{{ total_pages }}p{% endif %}
+    </p>
+    {% if sentiment_filter or category_filter or impact_filter or date_from or search_query %}
+    <a href="/news" class="text-xs text-slate-500 hover:text-red-400 transition-colors">필터 초기화</a>
+    {% endif %}
 </div>
 
 <!-- 뉴스 카드 -->
 <div class="space-y-3">
     {% for n in news %}
-    <div class="bg-surface rounded-xl border border-slate-700 p-4 lg:p-5 hover:border-slate-600 transition-colors">
+    <a href="{{ n.url }}" target="_blank" rel="noopener"
+        class="block bg-surface rounded-xl border border-slate-700 p-4 lg:p-5 hover:border-slate-600 transition-colors">
         <div class="flex items-start gap-3 lg:gap-4">
             <!-- 센티멘트 뱃지 -->
             <div class="shrink-0 mt-0.5 hidden sm:block">
-                {% if n.sentiment == 'positive' %}
+                {% if n.sentiment_label == 'positive' %}
                 <div class="w-12 h-12 rounded-lg bg-emerald-500/10 flex flex-col items-center justify-center">
-                    <span class="text-xs text-emerald-400 font-bold">{{ "%+.1f"|format(n.score) }}</span>
+                    <span class="text-xs text-emerald-400 font-bold">{{ "%+.1f"|format(n.sentiment_score) }}</span>
                     <span class="text-[10px] text-emerald-400/60">긍정</span>
                 </div>
-                {% elif n.sentiment == 'negative' %}
+                {% elif n.sentiment_label == 'negative' %}
                 <div class="w-12 h-12 rounded-lg bg-red-500/10 flex flex-col items-center justify-center">
-                    <span class="text-xs text-red-400 font-bold">{{ "%+.1f"|format(n.score) }}</span>
+                    <span class="text-xs text-red-400 font-bold">{{ "%+.1f"|format(n.sentiment_score) }}</span>
                     <span class="text-[10px] text-red-400/60">부정</span>
                 </div>
                 {% else %}
                 <div class="w-12 h-12 rounded-lg bg-slate-700/50 flex flex-col items-center justify-center">
-                    <span class="text-xs text-slate-400 font-bold">{{ "%+.1f"|format(n.score) }}</span>
+                    <span class="text-xs text-slate-400 font-bold">{{ "%+.1f"|format(n.sentiment_score) }}</span>
                     <span class="text-[10px] text-slate-400/60">중립</span>
                 </div>
                 {% endif %}
@@ -49,28 +153,32 @@
             <div class="flex-1 min-w-0">
                 <!-- 모바일 센티멘트 인라인 -->
                 <div class="flex items-center gap-2 mb-1.5 sm:hidden">
-                    {% if n.sentiment == 'positive' %}
-                    <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">긍정 {{ "%+.1f"|format(n.score) }}</span>
-                    {% elif n.sentiment == 'negative' %}
-                    <span class="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">부정 {{ "%+.1f"|format(n.score) }}</span>
+                    {% if n.sentiment_label == 'positive' %}
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">긍정 {{ "%+.1f"|format(n.sentiment_score) }}</span>
+                    {% elif n.sentiment_label == 'negative' %}
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">부정 {{ "%+.1f"|format(n.sentiment_score) }}</span>
                     {% else %}
-                    <span class="text-xs px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-400">중립 {{ "%+.1f"|format(n.score) }}</span>
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-400">중립 {{ "%+.1f"|format(n.sentiment_score) }}</span>
                     {% endif %}
-                    <span class="text-xs text-slate-500 ml-auto">{{ n.time }}</span>
+                    <span class="text-xs text-slate-500 ml-auto">{{ n.published_at.strftime('%m/%d %H:%M') }}</span>
                 </div>
                 <h3 class="text-sm font-semibold text-white mb-1.5">{{ n.title }}</h3>
+                {% if n.summary %}
                 <p class="text-xs text-slate-400 leading-relaxed mb-2">{{ n.summary }}</p>
+                {% endif %}
                 <div class="flex items-center gap-2 flex-wrap">
-                    {% for ticker in n.tickers.split(', ') %}
+                    <span class="text-xs text-slate-500">{{ n.source }}</span>
+                    {% if n.related_tickers %}
+                    {% for ticker in n.related_tickers.split(', ') %}
                     <span class="text-xs px-2 py-0.5 rounded bg-slate-700/50 text-slate-300">{{ ticker }}</span>
                     {% endfor %}
+                    {% endif %}
                 </div>
             </div>
 
             <!-- 우측 정보 (데스크탑) -->
             <div class="text-right shrink-0 hidden sm:block">
-                <div class="text-xs text-slate-500 mb-2">{{ n.time }}</div>
-                <!-- 영향도 -->
+                <div class="text-xs text-slate-500 mb-2">{{ n.published_at.strftime('%m/%d %H:%M') }}</div>
                 <div class="flex items-center gap-1 justify-end">
                     <span class="text-xs text-slate-500">영향도</span>
                     <div class="flex gap-0.5">
@@ -93,7 +201,45 @@
                 </div>
             </div>
         </div>
-    </div>
+    </a>
     {% endfor %}
 </div>
+
+<!-- 페이징 -->
+{% if total_pages > 1 %}
+<div class="flex items-center justify-center gap-2 mt-6">
+    {% if current_page > 1 %}
+    <a href="/news{{ qs({'page': current_page - 1}) }}"
+        class="px-3 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">&laquo; 이전</a>
+    {% endif %}
+
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == current_page %}
+        <span class="px-3 py-2 text-sm rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">{{ p }}</span>
+        {% elif p == 1 or p == total_pages or (p >= current_page - 2 and p <= current_page + 2) %}
+        <a href="/news{{ qs({'page': p}) }}"
+            class="px-3 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">{{ p }}</a>
+        {% elif p == current_page - 3 or p == current_page + 3 %}
+        <span class="text-slate-500">...</span>
+        {% endif %}
+    {% endfor %}
+
+    {% if current_page < total_pages %}
+    <a href="/news{{ qs({'page': current_page + 1}) }}"
+        class="px-3 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">다음 &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
+
+<script>
+document.getElementById('date-apply').addEventListener('click', function() {
+    const from = document.getElementById('date-from').value;
+    const to = document.getElementById('date-to').value;
+    const url = new URL(window.location);
+    if (from) url.searchParams.set('from', from); else url.searchParams.delete('from');
+    if (to) url.searchParams.set('to', to); else url.searchParams.delete('to');
+    url.searchParams.delete('page');
+    window.location = url;
+});
+</script>
 {% endblock %}

@@ -8,6 +8,12 @@ sqlalchemy>=2.0
 psycopg2-binary>=2.9
 python-dotenv>=1.1
 
+# Phase 2: 뉴스 + 센티멘트
+feedparser>=6.0
+httpx>=0.28
+google-generativeai>=0.8
+groq>=0.15
+
 # Phase 2~: 데이터 수집
 # pandas>=2.2
 # yfinance>=0.2.50
@@ -17,9 +23,3 @@ python-dotenv>=1.1
 # Phase 3~: ML
 # lightgbm>=4.6
 # vectorbt>=0.26
-
-# Phase 3~: AI
-# google-generativeai>=0.8
-
-# Phase 5~: 알림
-# python-telegram-bot>=21.0

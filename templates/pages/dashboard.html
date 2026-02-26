@@ -20,9 +20,9 @@
         <p class="text-sm mt-1 text-amber-400">3 bullish · 2 bearish</p>
     </div>
     <div class="bg-surface rounded-xl border border-slate-700 p-4 lg:p-5">
-        <p class="text-xs text-slate-400 mb-1">오늘 뉴스</p>
-        <p class="text-xl lg:text-2xl font-bold text-white">{{ news|length }}</p>
-        <p class="text-sm mt-1 text-slate-400">긍정 4 · 부정 2 · 중립 1</p>
+        <p class="text-xs text-slate-400 mb-1">수집 뉴스</p>
+        <p class="text-xl lg:text-2xl font-bold text-white">{{ news_stats.total }}</p>
+        <p class="text-sm mt-1 text-slate-400">긍정 {{ news_stats.positive }} · 부정 {{ news_stats.negative }} · 중립 {{ news_stats.neutral }}</p>
     </div>
 </div>
 
@@ -83,21 +83,23 @@
         </div>
         <div class="space-y-3">
             {% for n in news %}
-            <div class="p-3 rounded-lg bg-base/50">
+            <a href="{{ n.url }}" target="_blank" rel="noopener" class="block p-3 rounded-lg bg-base/50 hover:bg-slate-800/50 transition-colors">
                 <div class="flex items-center gap-2 mb-1">
-                    {% if n.sentiment == 'positive' %}
-                    <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">긍정 {{ "%+.1f"|format(n.score) }}</span>
-                    {% elif n.sentiment == 'negative' %}
-                    <span class="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">부정 {{ "%+.1f"|format(n.score) }}</span>
+                    {% if n.sentiment_label == 'positive' %}
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">긍정 {{ "%+.1f"|format(n.sentiment_score) }}</span>
+                    {% elif n.sentiment_label == 'negative' %}
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">부정 {{ "%+.1f"|format(n.sentiment_score) }}</span>
                     {% else %}
-                    <span class="text-xs px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-400">중립 {{ "%+.1f"|format(n.score) }}</span>
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-400">중립 {{ "%+.1f"|format(n.sentiment_score) }}</span>
                     {% endif %}
                     <span class="text-xs text-slate-500">영향도 {{ n.impact }}/10</span>
-                    <span class="ml-auto text-xs text-slate-500">{{ n.time }}</span>
+                    <span class="ml-auto text-xs text-slate-500">{{ n.published_at.strftime('%m/%d %H:%M') }}</span>
                 </div>
-                <p class="text-sm text-white font-medium">{{ n.title }}</p>
-                <p class="text-xs text-slate-500 mt-1">{{ n.tickers }}</p>
-            </div>
+                <p class="text-sm text-white font-medium truncate">{{ n.title }}</p>
+                {% if n.summary %}
+                <p class="text-xs text-slate-400 mt-1 truncate">{{ n.summary }}</p>
+                {% endif %}
+            </a>
             {% endfor %}
         </div>
     </div>

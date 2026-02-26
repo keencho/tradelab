@@ -1,8 +1,16 @@
 from datetime import datetime
+from functools import partial
+
 from sqlalchemy import String, Float, Integer, DateTime, Text, Enum
 from sqlalchemy.orm import Mapped, mapped_column
 
+from config import KST
 from db.database import Base
+
+
+def _now_kst():
+    """KST 현재시각을 naive datetime으로 반환 (DB 저장용)."""
+    return datetime.now(KST).replace(tzinfo=None)
 
 
 class Price(Base):
@@ -26,7 +34,7 @@ class News(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(500))
-    url: Mapped[str] = mapped_column(String(1000), default="")
+    url: Mapped[str] = mapped_column(String(1000), unique=True, default="")
     source: Mapped[str] = mapped_column(String(100))
     content: Mapped[str] = mapped_column(Text, default="")
     sentiment_label: Mapped[str] = mapped_column(String(10), default="")  # positive / negative / neutral
@@ -35,7 +43,7 @@ class News(Base):
     related_tickers: Mapped[str] = mapped_column(String(200), default="") # 쉼표 구분
     summary: Mapped[str] = mapped_column(String(500), default="")
     published_at: Mapped[datetime] = mapped_column(DateTime)
-    analyzed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    analyzed_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
 
 
 class Signal(Base):
@@ -49,7 +57,7 @@ class Signal(Base):
     confidence: Mapped[float] = mapped_column(Float)         # 0.0 ~ 1.0
     description: Mapped[str] = mapped_column(Text)
     ai_analysis: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
 
 
 class Trade(Base):
@@ -63,7 +71,7 @@ class Trade(Base):
     quantity: Mapped[float] = mapped_column(Float)
     price: Mapped[float] = mapped_column(Float)
     fee: Mapped[float] = mapped_column(Float, default=0.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
 
 
 class PortfolioSetting(Base):
@@ -72,4 +80,4 @@ class PortfolioSetting(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     initial_capital: Mapped[float] = mapped_column(Float, default=100_000_000)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)

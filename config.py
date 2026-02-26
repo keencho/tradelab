@@ -1,8 +1,11 @@
 import os
 import logging
-from logging.handlers import TimedRotatingFileHandler
+from datetime import timezone, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
+
+# --- 시간대 ---
+KST = timezone(timedelta(hours=9))
 
 # .env 로딩 순서:
 # 1) .env (공통 — API 키 등)
@@ -22,16 +25,22 @@ load_dotenv(BASE_DIR / f".env.{env}", override=True)
 # --- DB ---
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://tradelab:tradelab@localhost:5432/tradelab")
 
-# --- AI ---
+# --- LLM (센티멘트 분석 + 리포트) ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "")
 
 # --- 알림 ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# --- 데이터 수집 ---
-NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "")
+# --- 뉴스 수집 ---
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
+CRYPTOPANIC_API_KEY = os.getenv("CRYPTOPANIC_API_KEY", "")
+
+# --- 시그널/매크로 ---
 ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY", "")
+FRED_API_KEY = os.getenv("FRED_API_KEY", "")
 DART_API_KEY = os.getenv("DART_API_KEY", "")
 
 # --- 인증 ---
@@ -56,7 +65,7 @@ LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
 def get_logger(name: str) -> logging.Logger:
-    """모듈별 로거 생성. 파일(30일 보관) + 콘솔 동시 출력."""
+    """모듈별 로거 생성. 파일 + 콘솔 동시 출력."""
     logger = logging.getLogger(name)
 
     if logger.handlers:
@@ -65,11 +74,9 @@ def get_logger(name: str) -> logging.Logger:
     logger.setLevel(LOG_LEVEL)
     formatter = logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
 
-    # 파일 핸들러: 일 단위 로테이션, 30일 보관
-    file_handler = TimedRotatingFileHandler(
+    # 파일 핸들러: 단순 append (Windows 로테이션 잠금 문제 회피)
+    file_handler = logging.FileHandler(
         LOG_DIR / "app.log",
-        when="midnight",
-        backupCount=30,
         encoding="utf-8",
     )
     file_handler.setFormatter(formatter)

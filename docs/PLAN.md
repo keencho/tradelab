@@ -436,44 +436,63 @@ AI 해석 (Gemini)
 - [x] Favicon (TL 모노그램)
 
 ### Phase 2: 뉴스 + 센티멘트
-- [ ] 뉴스 수집 파이프라인 (NewsAPI)
-- [ ] Gemini API 센티멘트 분석 연동
+- [ ] DB 테이블 (news)
+- [ ] 뉴스 수집 파이프라인 (RSS + Finnhub + CryptoPanic)
+- [ ] LLM 센티멘트 분석 (Gemini → Groq → Cerebras 폴백)
 - [ ] 뉴스 페이지 실데이터 연결 (센티멘트 점수 + 필터)
+- [ ] 대시보드 최근 뉴스 실데이터 연결
 - [ ] 종목별 센티멘트 추이 차트
+- [ ] cron 스크립트 (collect_news.py)
 
-### Phase 3: 선행 시그널
-- [ ] 온체인 데이터 수집 (고래 추적)
+### Phase 3: 선행 시그널 + 매크로
+- [ ] 온체인 데이터 수집 — 고래 추적 (Etherscan)
 - [ ] SEC EDGAR / DART 내부자 매매 수집
-- [ ] 소셜 버즈 모니터링 (Reddit)
+- [ ] 소셜 버즈 모니터링 (Reddit .json)
+- [ ] 매크로 지표 수집 — CPI, 금리, 고용 (FRED API / yfinance)
+- [ ] 공포/탐욕 지수 — alternative.me (코인), CNN Fear & Greed (주식)
+- [ ] 코인 펀딩레이트 / OI (ccxt)
 - [ ] 이상 탐지 알고리즘 (z-score)
-- [ ] 시그널 페이지 + AI 해석
+- [ ] 시그널 페이지 실데이터 + AI 해석
+- [ ] 텔레그램 시그널 알림
 
 ### Phase 4: 가상매매
 - [ ] 포트폴리오 엔진 (매수/매도/P&L)
 - [ ] 매매 폼 (HTMX POST)
-- [ ] 포트폴리오 페이지 (보유종목, 수익률 차트)
+- [ ] 포트폴리오 페이지 실데이터 (보유종목, 수익률 차트)
 - [ ] 거래 히스토리 테이블
 
 ### Phase 5: AI 리서치 + 마무리
-- [ ] 종목 검색 → 자동 데이터 수집
+- [ ] 종목 검색 → 자동 데이터 수집 (yfinance + ccxt)
 - [ ] Gemini 종합 리포트 생성
 - [ ] 기술적 분석 차트 (Plotly.js)
-- [ ] 텔레그램 알림 연동
-- [ ] crontab 설정
+- [ ] crontab 전체 설정 + 모니터링
 
 ---
 
 ## 필요한 API 키 목록 (전부 무료)
 
+### 뉴스 수집
 | 서비스 | 용도 | 무료 한도 |
 |--------|------|-----------|
-| Google Gemini API | 센티멘트, 리포트 | 15 RPM, 1500건/일 |
-| NewsAPI | 뉴스 수집 | 100건/일 |
-| Reddit API | 소셜 센티멘트 | 무제한 (레이트리밋 있음) |
-| Etherscan | 온체인 데이터 | 5건/초 |
-| Whale Alert | 고래 추적 | 기본 무료 |
+| Finnhub | 미국 주식/코인 뉴스 + 빌트인 센티멘트 | 60 req/분 |
+| CryptoPanic | 코인 뉴스 + 커뮤니티 센티멘트 | ~100 req/일 |
+| RSS (한경/파이낸셜/CoinDesk 등) | 한국/코인/미국 뉴스 | 무제한, 키 불필요 |
+
+### LLM (센티멘트 분석 + 리포트)
+| 서비스 | 모델 | 무료 한도 |
+|--------|------|-----------|
+| Google Gemini | 2.5 Flash-Lite (메인) | 15 RPM, 1,000 RPD |
+| Groq | Llama 3.1 8B (백업) | 30 RPM, 14,400 RPD |
+| Cerebras | Llama 3.1 8B (백업) | 30 RPM, 14,400 RPD |
+
+### 시그널/데이터
+| 서비스 | 용도 | 무료 한도 |
+|--------|------|-----------|
+| Etherscan | 온체인 고래 추적 | 5 req/초 |
 | DART OpenAPI | 한국 공시 | 무제한 |
-| GitHub API | 크립토 프로젝트 활동 | 5000건/시간 |
+| FRED API | 미국 매크로 지표 (CPI, 금리 등) | 120 req/분 |
+| alternative.me | 코인 공포/탐욕 지수 | 무제한 |
+| Reddit .json | 소셜 버즈 | 키 불필요 (10 req/분) |
 | Telegram Bot | 알림 | 무제한 |
 
 ---
