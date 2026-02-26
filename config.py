@@ -43,6 +43,7 @@ CRYPTOPANIC_API_KEY = os.getenv("CRYPTOPANIC_API_KEY", "")
 ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY", "")
 FRED_API_KEY = os.getenv("FRED_API_KEY", "")
 DART_API_KEY = os.getenv("DART_API_KEY", "")
+ECOS_API_KEY = os.getenv("ECOS_API_KEY", "")
 
 # --- 인증 ---
 AUTH_ENABLED = env != "local"  # 로컬에서는 인증 비활성화

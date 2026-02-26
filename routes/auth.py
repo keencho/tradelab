@@ -116,12 +116,22 @@ def create_session(request: Request, response: Response):
 
 
 def reset_session(request: Request, response: Response):
-    """세션 리셋 — 기존 삭제 후 새로 발급."""
+    """세션 리셋 — 기존 삭제 후 새로 발급 (알림 없음)."""
     old_token = request.cookies.get(COOKIE_NAME)
+    username = "unknown"
     if old_token and old_token in _sessions:
+        _, username = _sessions[old_token]
         del _sessions[old_token]
 
-    create_session(request, response)
+    token = _make_token()
+    _sessions[token] = (time.time() + _session_ttl(), username)
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        max_age=int(_session_ttl()),
+        httponly=True,
+        samesite="lax",
+    )
 
 
 def logout(request: Request):

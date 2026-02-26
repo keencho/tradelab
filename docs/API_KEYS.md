@@ -54,11 +54,24 @@
 - 무료 한도: 무제한
 - `.env` 키명: `DART_API_KEY`
 
+### 한국은행 ECOS API (한국 매크로 — 기준금리, CPI, 실업률)
+- 가입: https://ecos.bok.or.kr/api/#/
+- 무료 한도: 100,000 req/일
+- 키 발급: 회원가입 후 인증키 신청 (즉시 발급)
+- `.env` 키명: `ECOS_API_KEY`
+
 ### 키 불필요 서비스
-- **alternative.me** — 코인 공포/탐욕 지수 (공개 API)
-- **Reddit .json** — 서브레딧 URL 뒤에 .json 붙이면 됨
-- **ccxt (Binance)** — 공개 마켓 데이터는 키 불필요
-- **RSS 피드** — 전부 공개
+
+| 서비스 | 용도 | 접근 방식 |
+|--------|------|-----------|
+| **pykrx** | 외국인/기관 순매수, 공매도 잔고, 프로그램 매매 | `pip install pykrx`, KRX 공개 데이터 |
+| **ccxt (Binance)** | 펀딩레이트, OI (미결제약정) | `pip install ccxt`, 공개 마켓 데이터 |
+| **alternative.me** | 코인 공포/탐욕 지수 | `https://api.alternative.me/fng/` |
+| **CNN Fear & Greed** | 미국주식 공포/탐욕 지수 | CNN 공개 API |
+| **Reddit .json** | 소셜 버즈 (r/wallstreetbets 등) | URL 뒤에 `.json` 붙이면 됨 (10 req/분) |
+| **네이버 종토방** | 한국주식 소셜 버즈 | 스크래핑 (차단 리스크 있음, 우선순위 낮음) |
+| **SEC EDGAR** | 미국 내부자 매매 (Form 4), 대량보유 (13F) | 공개 API, User-Agent 헤더만 필요 |
+| **RSS 피드** | 뉴스 수집 | 가입/키 없이 바로 사용 |
 
 ---
 
@@ -76,6 +89,7 @@ CEREBRAS_API_KEY=
 ETHERSCAN_API_KEY=
 FRED_API_KEY=
 DART_API_KEY=
+ECOS_API_KEY=
 ```
 
 ---
@@ -86,4 +100,8 @@ Phase 2 시작하려면 최소 이것만 있으면 됨:
 1. **Finnhub** — 미국/코인 뉴스 수집
 2. **Gemini** — 센티멘트 분석
 
-나머지는 나중에 발급해도 됨 (RSS는 키 없이 바로 동작).
+Phase 3 시작하려면 추가로:
+3. **DART** — 한국 공시/내부자 매매
+4. **ECOS** — 한국 매크로 지표
+
+나머지는 나중에 발급해도 됨 (RSS, pykrx, ccxt, Reddit 등은 키 불필요).

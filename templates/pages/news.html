@@ -124,7 +124,7 @@
 </div>
 
 <!-- 뉴스 카드 -->
-<div class="space-y-3">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
     {% for n in news %}
     <a href="{{ n.url }}" target="_blank" rel="noopener"
         class="block bg-surface rounded-xl border border-slate-700 p-4 lg:p-5 hover:border-slate-600 transition-colors">
