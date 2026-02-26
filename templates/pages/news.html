@@ -3,7 +3,7 @@
 
 {% block content %}
 <!-- 필터 -->
-<div class="flex items-center gap-3 mb-6">
+<div class="flex flex-wrap items-center gap-2 lg:gap-3 mb-6">
     <button class="px-4 py-2 text-sm rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">전체</button>
     <button class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">
         <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span>긍정
@@ -14,19 +14,19 @@
     <button class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">
         <span class="inline-block w-2 h-2 rounded-full bg-slate-400 mr-1.5"></span>중립
     </button>
-    <div class="ml-auto">
+    <div class="w-full sm:w-auto sm:ml-auto">
         <input type="text" placeholder="종목/키워드 검색..."
-            class="bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none w-48">
+            class="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none sm:w-48">
     </div>
 </div>
 
 <!-- 뉴스 카드 -->
 <div class="space-y-3">
     {% for n in news %}
-    <div class="bg-surface rounded-xl border border-slate-700 p-5 hover:border-slate-600 transition-colors">
-        <div class="flex items-start gap-4">
+    <div class="bg-surface rounded-xl border border-slate-700 p-4 lg:p-5 hover:border-slate-600 transition-colors">
+        <div class="flex items-start gap-3 lg:gap-4">
             <!-- 센티멘트 뱃지 -->
-            <div class="shrink-0 mt-0.5">
+            <div class="shrink-0 mt-0.5 hidden sm:block">
                 {% if n.sentiment == 'positive' %}
                 <div class="w-12 h-12 rounded-lg bg-emerald-500/10 flex flex-col items-center justify-center">
                     <span class="text-xs text-emerald-400 font-bold">{{ "%+.1f"|format(n.score) }}</span>
@@ -47,18 +47,28 @@
 
             <!-- 내용 -->
             <div class="flex-1 min-w-0">
+                <!-- 모바일 센티멘트 인라인 -->
+                <div class="flex items-center gap-2 mb-1.5 sm:hidden">
+                    {% if n.sentiment == 'positive' %}
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">긍정 {{ "%+.1f"|format(n.score) }}</span>
+                    {% elif n.sentiment == 'negative' %}
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">부정 {{ "%+.1f"|format(n.score) }}</span>
+                    {% else %}
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-400">중립 {{ "%+.1f"|format(n.score) }}</span>
+                    {% endif %}
+                    <span class="text-xs text-slate-500 ml-auto">{{ n.time }}</span>
+                </div>
                 <h3 class="text-sm font-semibold text-white mb-1.5">{{ n.title }}</h3>
                 <p class="text-xs text-slate-400 leading-relaxed mb-2">{{ n.summary }}</p>
-                <div class="flex items-center gap-3">
-                    <!-- 관련 종목 태그 -->
+                <div class="flex items-center gap-2 flex-wrap">
                     {% for ticker in n.tickers.split(', ') %}
                     <span class="text-xs px-2 py-0.5 rounded bg-slate-700/50 text-slate-300">{{ ticker }}</span>
                     {% endfor %}
                 </div>
             </div>
 
-            <!-- 우측 정보 -->
-            <div class="text-right shrink-0">
+            <!-- 우측 정보 (데스크탑) -->
+            <div class="text-right shrink-0 hidden sm:block">
                 <div class="text-xs text-slate-500 mb-2">{{ n.time }}</div>
                 <!-- 영향도 -->
                 <div class="flex items-center gap-1 justify-end">

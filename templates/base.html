@@ -48,10 +48,10 @@
 
     {% include "partials/sidebar.html" %}
 
-    <div class="flex-1 flex flex-col h-screen ml-64">
+    <div class="flex-1 flex flex-col h-screen lg:ml-64">
         {% include "partials/header.html" %}
 
-        <main class="flex-1 overflow-y-auto p-6">
+        <main class="flex-1 overflow-y-auto p-4 lg:p-6">
             {% block content %}{% endblock %}
         </main>
     </div>

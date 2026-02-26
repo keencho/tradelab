@@ -1,5 +1,11 @@
-<header class="h-16 border-b border-slate-700 bg-surface/50 backdrop-blur-sm flex items-center justify-between px-6">
-    <div>
+<header class="h-16 border-b border-slate-700 bg-surface/50 backdrop-blur-sm flex items-center justify-between px-4 lg:px-6">
+    <div class="flex items-center gap-3">
+        <!-- 모바일 햄버거 -->
+        <button onclick="toggleSidebar()" class="lg:hidden text-slate-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+        </button>
         <h1 class="text-lg font-semibold text-white">
             {% block page_title %}
             {% if page == 'dashboard' %}Dashboard
@@ -14,7 +20,7 @@
 
     <div class="flex items-center gap-3">
         <!-- 세션 남은시간 -->
-        <span class="text-xs text-slate-500" id="session-timer"></span>
+        <span class="text-xs text-slate-500 hidden sm:inline" id="session-timer"></span>
         <!-- 세션 리셋 -->
         <button onclick="resetSession()" title="세션 갱신 (24h 리셋)"
                 class="text-slate-500 hover:text-white transition-colors">

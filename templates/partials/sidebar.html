@@ -1,4 +1,7 @@
-<aside class="fixed left-0 top-0 h-screen w-64 bg-surface border-r border-slate-700 flex flex-col z-50">
+<!-- 모바일 오버레이 -->
+<div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-40 lg:hidden hidden" onclick="toggleSidebar()"></div>
+
+<aside id="sidebar" class="fixed left-0 top-0 h-screen w-64 bg-surface border-r border-slate-700 flex flex-col z-50 -translate-x-full lg:translate-x-0 transition-transform">
     <!-- 로고 -->
     <div class="h-16 px-6 border-b border-slate-700 flex items-center gap-3">
         <div class="w-9 h-9 bg-sky-500 rounded-lg flex items-center justify-center">
@@ -9,11 +12,17 @@
             </svg>
         </div>
         <span class="text-lg font-bold text-white">TradeLab</span>
+        <!-- 모바일 닫기 -->
+        <button onclick="toggleSidebar()" class="ml-auto lg:hidden text-slate-400 hover:text-white">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
     </div>
 
     <!-- 네비게이션 -->
     <nav class="flex-1 px-3 py-4 space-y-1">
-        <a href="/"
+        <a href="/" onclick="closeSidebar()"
            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
                   {% if page == 'dashboard' %}bg-sky-500/10 text-sky-400{% else %}text-slate-400 hover:text-white hover:bg-slate-700/50{% endif %}">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -22,7 +31,7 @@
             Dashboard
         </a>
 
-        <a href="/portfolio"
+        <a href="/portfolio" onclick="closeSidebar()"
            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
                   {% if page == 'portfolio' %}bg-sky-500/10 text-sky-400{% else %}text-slate-400 hover:text-white hover:bg-slate-700/50{% endif %}">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -31,7 +40,7 @@
             Portfolio
         </a>
 
-        <a href="/research"
+        <a href="/research" onclick="closeSidebar()"
            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
                   {% if page == 'research' %}bg-sky-500/10 text-sky-400{% else %}text-slate-400 hover:text-white hover:bg-slate-700/50{% endif %}">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -40,7 +49,7 @@
             Research
         </a>
 
-        <a href="/signals"
+        <a href="/signals" onclick="closeSidebar()"
            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
                   {% if page == 'signals' %}bg-sky-500/10 text-sky-400{% else %}text-slate-400 hover:text-white hover:bg-slate-700/50{% endif %}">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -50,7 +59,7 @@
             <span class="ml-auto bg-amber-500/20 text-amber-400 text-xs px-2 py-0.5 rounded-full">6</span>
         </a>
 
-        <a href="/news"
+        <a href="/news" onclick="closeSidebar()"
            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
                   {% if page == 'news' %}bg-sky-500/10 text-sky-400{% else %}text-slate-400 hover:text-white hover:bg-slate-700/50{% endif %}">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -59,5 +68,17 @@
             News
         </a>
     </nav>
-
 </aside>
+
+<script>
+    function toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('-translate-x-full');
+        document.getElementById('sidebar-overlay').classList.toggle('hidden');
+    }
+    function closeSidebar() {
+        if (window.innerWidth < 1024) {
+            document.getElementById('sidebar').classList.add('-translate-x-full');
+            document.getElementById('sidebar-overlay').classList.add('hidden');
+        }
+    }
+</script>
