@@ -8,12 +8,6 @@
 - 키 발급: 가입 즉시 대시보드에 표시
 - `.env` 키명: `FINNHUB_API_KEY`
 
-### CryptoPanic (코인 뉴스 + 센티멘트)
-- 가입: https://cryptopanic.com/ (회원가입 후)
-- 키 페이지: https://cryptopanic.com/developers/api/keys
-- 무료 한도: ~100 req/일
-- `.env` 키명: `CRYPTOPANIC_API_KEY`
-
 ### Google Gemini (LLM 센티멘트 분석 — 메인)
 - 가입: https://aistudio.google.com/apikey
 - 무료 한도: 15 RPM, 1,000 RPD (Flash-Lite)
@@ -80,7 +74,6 @@
 ```env
 # Phase 2: 뉴스
 FINNHUB_API_KEY=
-CRYPTOPANIC_API_KEY=
 GEMINI_API_KEY=
 GROQ_API_KEY=
 CEREBRAS_API_KEY=

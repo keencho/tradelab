@@ -103,4 +103,7 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    try:
+        run()
+    except Exception as e:
+        logger.error(f"치명적 에러: {e}", exc_info=True)

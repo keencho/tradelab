@@ -11,7 +11,7 @@
 ```cron
 TRADELAB_ENV=server
 
-*/30 * * * * cd ~/tradelab && venv/bin/python scripts/collect_news.py >> logs/cron.log 2>&1
+*/30 * * * * cd ~/tradelab && venv/bin/python scripts/collect_news.py >> /dev/null 2>&1
 ```
 
 ---
@@ -61,19 +61,19 @@ TRADELAB_ENV=server
 TRADELAB_ENV=server
 
 # ── Phase 2: 뉴스 ──────────────────────────────
-*/30 * * * *  cd ~/tradelab && venv/bin/python scripts/collect_news.py >> logs/cron.log 2>&1
+*/30 * * * *  cd ~/tradelab && venv/bin/python scripts/collect_news.py >> /dev/null 2>&1
 
 # ── Phase 3: 시그널 (5분) ──────────────────────
-*/5  * * * *  cd ~/tradelab && venv/bin/python scripts/collect_signals.py >> logs/cron.log 2>&1
+*/5  * * * *  cd ~/tradelab && venv/bin/python scripts/collect_signals.py >> /dev/null 2>&1
 
 # ── Phase 3: 네이버 종토방 (15분, 차단 방지) ───
-*/15 * * * *  cd ~/tradelab && venv/bin/python scripts/collect_naver_buzz.py >> logs/cron.log 2>&1
+*/15 * * * *  cd ~/tradelab && venv/bin/python scripts/collect_naver_buzz.py >> /dev/null 2>&1
 
 # ── Phase 3: 매크로 (1시간) ────────────────────
-0    * * * *  cd ~/tradelab && venv/bin/python scripts/collect_macro.py >> logs/cron.log 2>&1
+0    * * * *  cd ~/tradelab && venv/bin/python scripts/collect_macro.py >> /dev/null 2>&1
 
 # ── Phase 3: 이상 탐지 + 알림 (5분, 시그널 직후) ─
-*/5  * * * *  cd ~/tradelab && sleep 30 && venv/bin/python scripts/detect_anomaly.py >> logs/cron.log 2>&1
+*/5  * * * *  cd ~/tradelab && sleep 30 && venv/bin/python scripts/detect_anomaly.py >> /dev/null 2>&1
 ```
 
 > `detect_anomaly.py`는 `sleep 30`으로 시그널 수집 완료 후 실행되게 함.

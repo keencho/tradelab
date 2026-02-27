@@ -48,9 +48,9 @@ def _init_providers():
             name="gemini",
             api_key=GEMINI_API_KEY,
             url=f"https://generativelanguage.googleapis.com/v1beta/models/{{model}}:generateContent?key={{key}}",
-            model="gemini-2.5-flash-lite",
-            rpm=15,
-            rpd=1000,
+            model="gemini-2.5-flash",
+            rpm=10,
+            rpd=250,
         ),
         LLMProvider(
             name="groq",

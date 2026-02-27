@@ -1,11 +1,11 @@
-"""뉴스 수집기 — RSS + Finnhub + CryptoPanic."""
+"""뉴스 수집기 — RSS + Finnhub."""
 
 from datetime import datetime, timezone, timedelta
 
 import feedparser
 import httpx
 
-from config import FINNHUB_API_KEY, CRYPTOPANIC_API_KEY, KST, get_logger
+from config import FINNHUB_API_KEY, KST, get_logger
 
 logger = get_logger("news_collector")
 
@@ -139,59 +139,6 @@ def collect_finnhub_company(tickers: list[str]) -> list[dict]:
     return articles
 
 
-# ── CryptoPanic ──────────────────────────────────────
-
-CRYPTOPANIC_BASE = "https://cryptopanic.com/api/v1/posts/"
-
-
-def collect_cryptopanic() -> list[dict]:
-    """CryptoPanic 코인 뉴스 수집."""
-    if not CRYPTOPANIC_API_KEY:
-        return []
-
-    articles = []
-    try:
-        resp = httpx.get(
-            CRYPTOPANIC_BASE,
-            params={
-                "auth_token": CRYPTOPANIC_API_KEY,
-                "public": "true",
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        for item in data.get("results", [])[:20]:
-            currencies = [c["code"] for c in item.get("currencies", []) if "code" in c]
-            votes = item.get("votes", {})
-
-            articles.append({
-                "title": item.get("title", ""),
-                "url": item.get("url", ""),
-                "summary": "",
-                "source": "cryptopanic",
-                "published_at": _parse_iso(item.get("published_at", "")),
-                "tickers": ", ".join(currencies),
-                "votes_positive": votes.get("positive", 0),
-                "votes_negative": votes.get("negative", 0),
-            })
-    except Exception as e:
-        logger.error(f"CryptoPanic 수집 실패: {e}")
-
-    logger.info(f"CryptoPanic 수집 완료: {len(articles)}건")
-    return articles
-
-
-def _parse_iso(date_str: str) -> datetime:
-    """ISO 8601 문자열 → datetime (KST 변환)."""
-    try:
-        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-        return dt.astimezone(KST)
-    except Exception:
-        return datetime.now(KST)
-
-
 # ── 전체 수집 ────────────────────────────────────────
 
 # 기본 워치리스트 (Finnhub company 뉴스 조회용)
@@ -207,7 +154,6 @@ def collect_all(watchlist: list[str] | None = None) -> list[dict]:
     all_articles.extend(collect_rss())
     all_articles.extend(collect_finnhub_market())
     all_articles.extend(collect_finnhub_company(watchlist))
-    all_articles.extend(collect_cryptopanic())
 
     # URL 기준 중복 제거
     seen_urls: set[str] = set()

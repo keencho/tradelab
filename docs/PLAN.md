@@ -444,7 +444,7 @@ AI 해석 (Gemini)
 - [x] 뉴스 페이지 실데이터 연결 (센티멘트/카테고리/영향도/날짜/검색 필터 + 페이징)
 - [x] 대시보드 최근 뉴스 실데이터 + 통계
 - [x] cron 스크립트 (collect_news.py, 30분 주기)
-- [ ] **CryptoPanic API 키 재발급 + 연동** (크립토 뉴스 필수, 현재 404 — 사이트 안정화 후 키 재발급 필요)
+- [x] ~~CryptoPanic~~ — Developer 플랜 24h 딜레이 + 월 100건 제한으로 비활성화. 코인 뉴스는 RSS(CoinDesk, CoinTelegraph) + Finnhub crypto로 커버
 
 ### Phase 3: 선행 시그널 + 매크로
 
@@ -501,7 +501,7 @@ AI 해석 (Gemini)
 ### LLM (센티멘트 분석 + 리포트)
 | 서비스 | 모델 | 무료 한도 |
 |--------|------|-----------|
-| Google Gemini | 2.5 Flash-Lite (메인) | 15 RPM, 1,000 RPD |
+| Google Gemini | 2.5 Flash (메인) | 10 RPM, 250 RPD |
 | Groq | Llama 3.1 8B (백업) | 30 RPM, 14,400 RPD |
 | Cerebras | Llama 3.1 8B (백업) | 30 RPM, 14,400 RPD |
 
