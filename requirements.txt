@@ -15,11 +15,16 @@ google-generativeai>=0.8
 groq>=0.15
 
 # Phase 2~: 데이터 수집
-# pandas>=2.2
+pandas>=2.2
 # yfinance>=0.2.50
-# ccxt>=4.4
-# pykrx>=1.0
+ccxt>=4.4
+pykrx>=1.0
 
-# Phase 3~: ML
+# Phase 3: 시그널
+fredapi>=0.5
+opendartreader>=0.2
+beautifulsoup4>=4.12
+
+# Phase 4~: ML
 # lightgbm>=4.6
 # vectorbt>=0.26

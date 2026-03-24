@@ -1,24 +1,87 @@
 {% extends "base.html" %}
 {% block title_suffix %} — Signals{% endblock %}
 
+{# 필터 유지 query string 빌더 #}
+{% macro qs(overrides={}) %}
+{%- set params = {} -%}
+{%- if direction_filter and 'direction' not in overrides %}{% set _ = params.update({'direction': direction_filter}) %}{% endif -%}
+{%- if market_filter and 'market' not in overrides %}{% set _ = params.update({'market': market_filter}) %}{% endif -%}
+{%- if type_filter and 'type' not in overrides %}{% set _ = params.update({'type': type_filter}) %}{% endif -%}
+{%- if search_query and 'q' not in overrides %}{% set _ = params.update({'q': search_query}) %}{% endif -%}
+{%- set _ = params.update(overrides) -%}
+{%- set parts = [] -%}
+{%- for k, v in params.items() if v %}{% set _ = parts.append(k ~ '=' ~ v) %}{% endfor -%}
+{%- if parts %}?{{ parts|join('&') }}{% endif -%}
+{% endmacro %}
+
 {% block content %}
-<!-- 필터 -->
-<div class="flex flex-wrap items-center gap-2 lg:gap-3 mb-6">
-    <button class="px-4 py-2 text-sm rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">전체</button>
-    <button class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">
-        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span>Bullish
-    </button>
-    <button class="px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">
-        <span class="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5"></span>Bearish
-    </button>
+<!-- 1행: 방향 필터 + 검색 -->
+<div class="flex flex-wrap items-center gap-2 lg:gap-3 mb-3">
+    <a href="/signals{{ qs({'direction': '', 'page': ''}) }}"
+        class="px-4 py-2 text-sm rounded-lg font-medium transition-colors
+        {% if not direction_filter %}bg-sky-500/10 text-sky-400 border border-sky-500/20
+        {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50{% endif %}">전체</a>
+    <a href="/signals{{ qs({'direction': 'bullish', 'page': ''}) }}"
+        class="px-4 py-2 text-sm rounded-lg transition-colors
+        {% if direction_filter == 'bullish' %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium
+        {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50{% endif %}">
+        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span>Bullish</a>
+    <a href="/signals{{ qs({'direction': 'bearish', 'page': ''}) }}"
+        class="px-4 py-2 text-sm rounded-lg transition-colors
+        {% if direction_filter == 'bearish' %}bg-red-500/10 text-red-400 border border-red-500/20 font-medium
+        {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50{% endif %}">
+        <span class="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5"></span>Bearish</a>
     <div class="w-full sm:w-auto sm:ml-auto">
-        <input type="text" placeholder="종목 검색..."
-            class="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none sm:w-48">
+        <form method="get" action="/signals" class="flex gap-2">
+            {% if direction_filter %}<input type="hidden" name="direction" value="{{ direction_filter }}">{% endif %}
+            {% if market_filter %}<input type="hidden" name="market" value="{{ market_filter }}">{% endif %}
+            {% if type_filter %}<input type="hidden" name="type" value="{{ type_filter }}">{% endif %}
+            <input type="text" name="q" value="{{ search_query }}" placeholder="종목 검색..."
+                class="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none sm:w-48">
+            <button type="submit" class="px-3 py-2 text-sm rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 transition-colors shrink-0">검색</button>
+        </form>
     </div>
 </div>
 
+<!-- 2행: 마켓 필터 -->
+<div class="flex flex-wrap items-center gap-2 lg:gap-3 mb-4">
+    <span class="text-xs text-slate-500 mr-1">마켓</span>
+    <a href="/signals{{ qs({'market': '', 'page': ''}) }}"
+        class="px-3 py-1.5 text-xs rounded-lg transition-colors
+        {% if not market_filter %}bg-sky-500/10 text-sky-400 border border-sky-500/20
+        {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700{% endif %}">전체</a>
+    <a href="/signals{{ qs({'market': 'crypto', 'page': ''}) }}"
+        class="px-3 py-1.5 text-xs rounded-lg transition-colors
+        {% if market_filter == 'crypto' %}bg-amber-500/10 text-amber-400 border border-amber-500/20
+        {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700{% endif %}">코인</a>
+    <a href="/signals{{ qs({'market': 'us_stock', 'page': ''}) }}"
+        class="px-3 py-1.5 text-xs rounded-lg transition-colors
+        {% if market_filter == 'us_stock' %}bg-blue-500/10 text-blue-400 border border-blue-500/20
+        {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700{% endif %}">미국주식</a>
+    <a href="/signals{{ qs({'market': 'kr_stock', 'page': ''}) }}"
+        class="px-3 py-1.5 text-xs rounded-lg transition-colors
+        {% if market_filter == 'kr_stock' %}bg-purple-500/10 text-purple-400 border border-purple-500/20
+        {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700{% endif %}">한국주식</a>
+    <a href="/signals{{ qs({'market': 'macro', 'page': ''}) }}"
+        class="px-3 py-1.5 text-xs rounded-lg transition-colors
+        {% if market_filter == 'macro' %}bg-teal-500/10 text-teal-400 border border-teal-500/20
+        {% else %}text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700{% endif %}">매크로</a>
+</div>
+
+<!-- 결과 카운트 -->
+<div class="flex items-center justify-between mb-4">
+    <p class="text-xs text-slate-500">
+        {% if search_query %}「{{ search_query }}」 {% endif %}
+        총 {{ total_count }}건
+        {% if total_pages > 1 %} · {{ current_page }}/{{ total_pages }}p{% endif %}
+    </p>
+    {% if direction_filter or market_filter or type_filter or search_query %}
+    <a href="/signals" class="text-xs text-slate-500 hover:text-red-400 transition-colors">필터 초기화</a>
+    {% endif %}
+</div>
+
 <!-- 시그널 카드 -->
-<div class="space-y-3">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
     {% for s in signals %}
     <div class="bg-surface rounded-xl border border-slate-700 p-4 lg:p-5 hover:border-slate-600 transition-colors">
         <div class="flex items-start gap-3 lg:gap-4">
@@ -43,17 +106,20 @@
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1 flex-wrap">
                     <span class="text-base font-bold text-white">{{ s.ticker }}</span>
-                    <span class="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">{{ s.type }}</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">{{ s.signal_type }}</span>
                     <span class="text-xs px-2 py-0.5 rounded-full
                         {% if s.direction == 'bullish' %}bg-emerald-500/10 text-emerald-400
                         {% else %}bg-red-500/10 text-red-400{% endif %}">
                         {{ s.direction }}
                     </span>
-                    <span class="text-xs text-slate-500 sm:hidden ml-auto">{{ s.time }}</span>
+                    {% if s.market %}
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400">{{ s.market }}</span>
+                    {% endif %}
+                    <span class="text-xs text-slate-500 sm:hidden ml-auto">{{ s.created_at.strftime('%m/%d %H:%M') }}</span>
                 </div>
-                <p class="text-sm text-slate-300 mb-2">{{ s.desc }}</p>
+                <p class="text-sm text-slate-300 mb-2">{{ s.description }}</p>
 
-                {% if s.ai %}
+                {% if s.ai_analysis %}
                 <div class="bg-base/80 rounded-lg p-3 border border-slate-700/50">
                     <div class="flex items-center gap-1.5 mb-1">
                         <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -61,14 +127,17 @@
                         </svg>
                         <span class="text-xs text-sky-400 font-medium">AI 분석</span>
                     </div>
-                    <p class="text-xs text-slate-400 leading-relaxed">{{ s.ai }}</p>
+                    <p class="text-xs text-slate-400 leading-relaxed">{{ s.ai_analysis }}</p>
                 </div>
                 {% endif %}
             </div>
 
             <!-- 우측 정보 -->
             <div class="text-right shrink-0 hidden sm:block">
-                <div class="text-xs text-slate-500 mb-2">{{ s.time }}</div>
+                <div class="text-xs text-slate-500 mb-2">{{ s.created_at.strftime('%m/%d %H:%M') }}</div>
+                {% if s.z_score %}
+                <div class="text-xs text-slate-500 mb-1">z={{ "%+.2f"|format(s.z_score) }}</div>
+                {% endif %}
                 <div class="mb-2">
                     <span class="text-lg font-bold
                         {% if s.confidence >= 0.8 %}text-emerald-400
@@ -88,7 +157,7 @@
                 </div>
             </div>
 
-            <!-- 모바일 확신도 (우측 대신 인라인) -->
+            <!-- 모바일 확신도 -->
             <div class="shrink-0 sm:hidden">
                 <span class="text-sm font-bold
                     {% if s.confidence >= 0.8 %}text-emerald-400
@@ -101,4 +170,36 @@
     </div>
     {% endfor %}
 </div>
+
+{% if signals|length == 0 %}
+<div class="text-center py-12">
+    <p class="text-slate-500 text-sm">시그널이 없습니다. 데이터가 수집되면 여기에 표시됩니다.</p>
+</div>
+{% endif %}
+
+<!-- 페이징 -->
+{% if total_pages > 1 %}
+<div class="flex items-center justify-center gap-2 mt-6">
+    {% if current_page > 1 %}
+    <a href="/signals{{ qs({'page': current_page - 1}) }}"
+        class="px-3 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">&laquo; 이전</a>
+    {% endif %}
+
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == current_page %}
+        <span class="px-3 py-2 text-sm rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">{{ p }}</span>
+        {% elif p == 1 or p == total_pages or (p >= current_page - 2 and p <= current_page + 2) %}
+        <a href="/signals{{ qs({'page': p}) }}"
+            class="px-3 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">{{ p }}</a>
+        {% elif p == current_page - 3 or p == current_page + 3 %}
+        <span class="text-slate-500">...</span>
+        {% endif %}
+    {% endfor %}
+
+    {% if current_page < total_pages %}
+    <a href="/signals{{ qs({'page': current_page + 1}) }}"
+        class="px-3 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">다음 &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
 {% endblock %}

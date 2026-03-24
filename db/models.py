@@ -1,7 +1,8 @@
 from datetime import datetime
 from functools import partial
 
-from sqlalchemy import String, Float, Integer, DateTime, Text, Enum
+from sqlalchemy import String, Float, Integer, DateTime, Text, Enum, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from config import KST
@@ -46,17 +47,38 @@ class News(Base):
     analyzed_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
 
 
+class SignalData(Base):
+    """시그널 원본 데이터 (주기적 수집, z-score 계산용)"""
+    __tablename__ = "signal_data"
+    __table_args__ = (
+        UniqueConstraint("source", "data_type", "ticker", "collected_at", name="uq_signal_data"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source: Mapped[str] = mapped_column(String(30), index=True)
+    data_type: Mapped[str] = mapped_column(String(50), index=True)
+    ticker: Mapped[str] = mapped_column(String(30), default="")
+    market: Mapped[str] = mapped_column(String(10), default="")
+    value: Mapped[float] = mapped_column(Float)
+    extra: Mapped[dict] = mapped_column(JSONB, default=dict)
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst, index=True)
+
+
 class Signal(Base):
     """선행 시그널 (이상 탐지 결과)"""
     __tablename__ = "signals"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ticker: Mapped[str] = mapped_column(String(20), index=True)
-    signal_type: Mapped[str] = mapped_column(String(50))   # "whale_alert" | "insider_trade" | "social_buzz" | ...
-    direction: Mapped[str] = mapped_column(String(10))      # "bullish" | "bearish" | "neutral"
-    confidence: Mapped[float] = mapped_column(Float)         # 0.0 ~ 1.0
+    signal_type: Mapped[str] = mapped_column(String(50))
+    direction: Mapped[str] = mapped_column(String(10))
+    confidence: Mapped[float] = mapped_column(Float)
     description: Mapped[str] = mapped_column(Text)
     ai_analysis: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(30), default="")
+    market: Mapped[str] = mapped_column(String(10), default="")
+    z_score: Mapped[float] = mapped_column(Float, default=0.0)
+    raw_value: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
 
 

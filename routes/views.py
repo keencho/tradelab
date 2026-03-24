@@ -7,7 +7,7 @@ from sqlalchemy import func, or_
 
 from config import AUTH_ENABLED, get_logger
 from db.database import SessionLocal
-from db.models import News
+from db.models import News, Signal
 from routes.auth import require_auth, create_session, COOKIE_NAME, _get_client_ip
 
 router = APIRouter()
@@ -43,25 +43,6 @@ MOCK_PORTFOLIO = {
     ],
 }
 
-MOCK_SIGNALS = [
-    {"ticker": "BTC", "type": "whale_alert", "direction": "bullish", "confidence": 0.85, "time": "02/25 12:30", "desc": "바이낸스에서 2,400 BTC ($234M) 출금 감지. 콜드월렛 이동 추정.", "ai": "최근 30일 내 유사 패턴 7회 발생, 이 중 5회(71%)에서 48시간 내 3~8% 상승. 기관의 장기 보유 전환 가능성."},
-    {"ticker": "NVDA", "type": "insider_trade", "direction": "bearish", "confidence": 0.72, "time": "02/25 09:15", "desc": "CFO가 $5.2M 규모 주식 매도 (Form 4 제출)", "ai": "경영진 매도 자체는 흔하나, 실적 발표 2주 전 대량 매도는 주의 필요. 최근 6개월 내부자 순매도 비율 증가 추세."},
-    {"ticker": "ETH", "type": "social_buzz", "direction": "bullish", "confidence": 0.68, "time": "02/25 08:00", "desc": "Reddit r/ethereum 언급량 평소 대비 4.2배 급증. 긍정 센티멘트 78%.", "ai": "Pectra 업그레이드 기대감 반영. 과거 언급량 급증 후 평균 5.2% 상승 (3일 내)."},
-    {"ticker": "AAPL", "type": "option_flow", "direction": "bearish", "confidence": 0.65, "time": "02/24 16:00", "desc": "풋옵션 거래량 평소 3.8배. 행사가 $180 (3월 만기) 집중.", "ai": "기관 헤지 가능성 높음. 실적 시즌 앞두고 방어적 포지셔닝으로 해석."},
-    {"ticker": "SOL", "type": "onchain", "direction": "bullish", "confidence": 0.78, "time": "02/24 14:30", "desc": "DEX 거래량 7일 연속 증가. TVL $12.8B 역대 최고 경신.", "ai": "네트워크 활성도와 가격은 강한 상관관계(0.82). TVL 신고 후 평균 2주 내 15~25% 상승 이력."},
-    {"ticker": "005930.KS", "type": "dart_filing", "direction": "bullish", "confidence": 0.60, "time": "02/24 10:00", "desc": "삼성전자, HBM3E 양산 승인 관련 공시.", "ai": "HBM 시장 점유율 확보 시 반도체 사이클 수혜 예상. 다만 SK하이닉스 대비 후발주자 리스크 존재."},
-]
-
-MOCK_NEWS = [
-    {"title": "Fed 파월 의장, 금리 인하 가능성 시사", "sentiment": "positive", "score": 0.82, "impact": 9, "tickers": "SPY, QQQ, BTC", "time": "02/25 13:00", "summary": "파월 의장이 인플레이션 둔화 추세를 확인하며 올해 내 금리 인하 가능성을 시사. 시장 즉각 반응."},
-    {"title": "NVIDIA, 데이터센터 매출 전년 대비 120% 증가", "sentiment": "positive", "score": 0.91, "impact": 8, "tickers": "NVDA, AMD, SMCI", "time": "02/25 11:30", "summary": "4분기 실적 발표. AI 인프라 수요 폭증으로 데이터센터 부문 사상 최대 매출 기록."},
-    {"title": "중국, 크립토 거래소 규제 강화 방침 발표", "sentiment": "negative", "score": -0.75, "impact": 7, "tickers": "BTC, ETH", "time": "02/25 10:00", "summary": "중국 인민은행, 해외 크립토 거래소의 위안화 결제 차단 강화. 단기 매도 압력 우려."},
-    {"title": "테슬라, 신형 로보택시 플랫폼 공개", "sentiment": "positive", "score": 0.65, "impact": 6, "tickers": "TSLA", "time": "02/25 08:30", "summary": "완전자율주행 기반 로보택시 전용 플랫폼 발표. 2026년 3분기 상용화 목표."},
-    {"title": "일본 BOJ, 추가 금리 인상 동결", "sentiment": "neutral", "score": 0.10, "impact": 5, "tickers": "USD/JPY", "time": "02/24 22:00", "summary": "BOJ, 시장 예상대로 금리 동결 결정. 엔화 약세 지속 전망."},
-    {"title": "이더리움 Pectra 업그레이드 일정 확정", "sentiment": "positive", "score": 0.73, "impact": 7, "tickers": "ETH", "time": "02/24 18:00", "summary": "3월 중 메인넷 적용 확정. 스테이킹 효율성 개선 및 가스비 절감 기대."},
-    {"title": "삼성전자, HBM3E 엔비디아 품질 테스트 통과", "sentiment": "positive", "score": 0.80, "impact": 8, "tickers": "005930.KS", "time": "02/24 15:00", "summary": "HBM3E 제품이 엔비디아 품질 테스트를 최종 통과. 하반기 본격 납품 예정."},
-    {"title": "미국 소비자물가지수(CPI) 예상 상회", "sentiment": "negative", "score": -0.60, "impact": 8, "tickers": "SPY, BTC, GOLD", "time": "02/24 09:30", "summary": "1월 CPI 3.1% 기록, 시장 예상 2.9% 상회. 금리 인하 지연 우려 확대."},
-]
 
 MOCK_CHART_DATA = {
     "dates": ["02/11","02/12","02/13","02/14","02/15","02/16","02/17","02/18","02/19","02/20","02/21","02/22","02/23","02/24","02/25"],
@@ -103,7 +84,7 @@ def _page_response(request: Request, template: str, context: dict) -> Response:
         return denied
 
     context["auth_enabled"] = AUTH_ENABLED
-    response = templates.TemplateResponse(template, context)
+    response = templates.TemplateResponse(request, template, context)
 
     # 쿠키 없으면 새 세션 발급 (Basic Auth로 최초 통과한 경우)
     if not request.cookies.get(COOKIE_NAME):
@@ -129,11 +110,18 @@ async def dashboard(request: Request):
         news_negative = session.query(News).filter(News.sentiment_label == "negative").count()
         news_neutral = news_total - news_positive - news_negative
 
+        recent_signals = (
+            session.query(Signal)
+            .order_by(Signal.created_at.desc())
+            .limit(5)
+            .all()
+        )
+
         return _page_response(request, "pages/dashboard.html", {
             "request": request,
             "page": "dashboard",
             "portfolio": MOCK_PORTFOLIO,
-            "signals": MOCK_SIGNALS[:5],
+            "signals": recent_signals,
             "news": recent_news,
             "news_stats": {
                 "total": news_total,
@@ -164,13 +152,62 @@ async def research(request: Request):
     })
 
 
+SIGNALS_PER_PAGE = 20
+
+SIGNAL_MARKET_MAP = {
+    "kr_stock": "한국주식",
+    "us_stock": "미국주식",
+    "crypto": "코인",
+    "macro": "매크로",
+}
+
+
 @router.get("/signals", response_class=HTMLResponse)
 async def signals(request: Request):
-    return _page_response(request, "pages/signals.html", {
-        "request": request,
-        "page": "signals",
-        "signals": MOCK_SIGNALS,
-    })
+    page = int(request.query_params.get("page", 1))
+    direction = request.query_params.get("direction", "")
+    market = request.query_params.get("market", "")
+    signal_type = request.query_params.get("type", "")
+    search = request.query_params.get("q", "").strip()
+
+    session = SessionLocal()
+    try:
+        query = session.query(Signal)
+
+        if direction in ("bullish", "bearish"):
+            query = query.filter(Signal.direction == direction)
+        if market in SIGNAL_MARKET_MAP:
+            query = query.filter(Signal.market == market)
+        if signal_type:
+            query = query.filter(Signal.signal_type == signal_type)
+        if search:
+            query = query.filter(Signal.ticker.ilike(f"%{search}%"))
+
+        total = query.count()
+        total_pages = max(1, math.ceil(total / SIGNALS_PER_PAGE))
+        page = max(1, min(page, total_pages))
+
+        signals_list = (
+            query.order_by(Signal.created_at.desc())
+            .offset((page - 1) * SIGNALS_PER_PAGE)
+            .limit(SIGNALS_PER_PAGE)
+            .all()
+        )
+
+        return _page_response(request, "pages/signals.html", {
+            "request": request,
+            "page": "signals",
+            "signals": signals_list,
+            "current_page": page,
+            "total_pages": total_pages,
+            "total_count": total,
+            "direction_filter": direction,
+            "market_filter": market,
+            "type_filter": signal_type,
+            "search_query": search,
+        })
+    finally:
+        session.close()
 
 
 NEWS_PER_PAGE = 20
