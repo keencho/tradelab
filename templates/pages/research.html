@@ -3,48 +3,48 @@
 
 {% block content %}
 <!-- 검색 바 -->
-<div class="bg-surface rounded-xl border border-slate-700 p-4 lg:p-5 mb-6">
+<div class="bg-surface rounded-card p-4 lg:p-5 mb-8">
     <div class="flex gap-3">
         <input type="text" id="research-input" placeholder="종목 코드 입력 (AAPL, BTC-USD, 005930.KS ...)"
-            class="flex-1 bg-base border border-slate-700 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none">
-        <button class="px-4 lg:px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white text-sm font-semibold rounded-lg transition-colors whitespace-nowrap">
+            class="flex-1 bg-elevated border-0 rounded-xl px-4 py-3 text-sm text-white placeholder-muted focus:ring-2 focus:ring-toss focus:outline-none">
+        <button class="px-4 lg:px-6 py-3 bg-toss hover:bg-toss/90 active:bg-toss/80 text-white text-sm font-semibold rounded-xl transition-colors whitespace-nowrap">
             분석하기
         </button>
     </div>
 </div>
 
 <!-- Mock: NVDA 분석 결과 -->
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-6">
-    <div class="bg-surface rounded-xl border border-slate-700 p-4 lg:p-5">
-        <p class="text-xs text-slate-400 mb-1">현재가</p>
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-8">
+    <div class="bg-surface rounded-card p-4 lg:p-5">
+        <p class="text-xs text-muted mb-1">현재가</p>
         <p class="text-xl lg:text-2xl font-bold text-white">$920.50</p>
-        <p class="text-sm mt-1 text-emerald-400">+$12.30 (+1.35%)</p>
+        <p class="text-sm mt-1 text-[#F04452]">+$12.30 (+1.35%)</p>
     </div>
-    <div class="bg-surface rounded-xl border border-slate-700 p-4 lg:p-5">
-        <p class="text-xs text-slate-400 mb-1">시가총액</p>
+    <div class="bg-surface rounded-card p-4 lg:p-5">
+        <p class="text-xs text-muted mb-1">시가총액</p>
         <p class="text-xl lg:text-2xl font-bold text-white">$2.27T</p>
-        <p class="text-sm mt-1 text-slate-400">Mega Cap</p>
+        <p class="text-sm mt-1 text-muted">Mega Cap</p>
     </div>
-    <div class="bg-surface rounded-xl border border-slate-700 p-4 lg:p-5">
-        <p class="text-xs text-slate-400 mb-1">PER</p>
+    <div class="bg-surface rounded-card p-4 lg:p-5">
+        <p class="text-xs text-muted mb-1">PER</p>
         <p class="text-xl lg:text-2xl font-bold text-white">65.2</p>
-        <p class="text-sm mt-1 text-amber-400">업종 평균 28.5</p>
+        <p class="text-sm mt-1 text-[#FF9F00]">업종 평균 28.5</p>
     </div>
-    <div class="bg-surface rounded-xl border border-slate-700 p-4 lg:p-5">
-        <p class="text-xs text-slate-400 mb-1">52주 범위</p>
+    <div class="bg-surface rounded-card p-4 lg:p-5">
+        <p class="text-xs text-muted mb-1">52주 범위</p>
         <p class="text-xl lg:text-2xl font-bold text-white">$470 — $974</p>
-        <p class="text-sm mt-1 text-slate-400">현재 상위 6%</p>
+        <p class="text-sm mt-1 text-muted">현재 상위 6%</p>
     </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-8">
     <!-- 차트 (모바일 1칸, 데스크탑 3칸) -->
-    <div class="lg:col-span-3 bg-surface rounded-xl border border-slate-700 p-4 lg:p-5">
+    <div class="lg:col-span-3 bg-surface rounded-card p-4 lg:p-5">
         <div class="flex items-center justify-between mb-4">
-            <h2 class="text-sm font-semibold text-slate-300">NVDA 캔들 차트</h2>
+            <h2 class="text-sm font-semibold text-white">NVDA 캔들 차트</h2>
             <div class="flex gap-1">
                 {% for period in ['1M', '3M', '6M', '1Y'] %}
-                <button class="px-2.5 lg:px-3 py-1 text-xs rounded-md {% if period == '6M' %}bg-sky-500/10 text-sky-400{% else %}text-slate-400 hover:text-white{% endif %}">{{ period }}</button>
+                <button class="px-2.5 lg:px-3 py-1 text-xs rounded-lg {% if period == '6M' %}bg-toss/10 text-toss{% else %}text-muted hover:text-white active:bg-elevated{% endif %}">{{ period }}</button>
                 {% endfor %}
             </div>
         </div>
@@ -54,59 +54,59 @@
     <!-- 정보 패널 (모바일 1칸, 데스크탑 2칸) -->
     <div class="lg:col-span-2 space-y-4">
         <!-- 기업 정보 -->
-        <div class="bg-surface rounded-xl border border-slate-700 p-4 lg:p-5">
-            <h2 class="text-sm font-semibold text-slate-300 mb-3">기업 정보</h2>
+        <div class="bg-surface rounded-card p-4 lg:p-5">
+            <h2 class="text-sm font-semibold text-white mb-3">기업 정보</h2>
             <div class="space-y-2.5 text-sm">
                 <div class="flex justify-between">
-                    <span class="text-slate-400">섹터</span>
+                    <span class="text-muted">섹터</span>
                     <span class="text-white">Technology</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-slate-400">산업</span>
+                    <span class="text-muted">산업</span>
                     <span class="text-white">Semiconductors</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-slate-400">매출 (YoY)</span>
-                    <span class="text-emerald-400">+120%</span>
+                    <span class="text-muted">매출 (YoY)</span>
+                    <span class="text-[#F04452]">+120%</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-slate-400">영업이익률</span>
+                    <span class="text-muted">영업이익률</span>
                     <span class="text-white">62.1%</span>
                 </div>
             </div>
         </div>
 
         <!-- 센티멘트 -->
-        <div class="bg-surface rounded-xl border border-slate-700 p-4 lg:p-5">
-            <h2 class="text-sm font-semibold text-slate-300 mb-3">센티멘트</h2>
+        <div class="bg-surface rounded-card p-4 lg:p-5">
+            <h2 class="text-sm font-semibold text-white mb-3">센티멘트</h2>
             <div class="flex items-center gap-3 mb-3">
-                <div class="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
-                    <div class="h-full bg-emerald-500 rounded-full" style="width: 78%"></div>
+                <div class="flex-1 h-2 bg-elevated rounded-full overflow-hidden">
+                    <div class="h-full bg-[#F04452] rounded-full" style="width: 78%"></div>
                 </div>
-                <span class="text-sm font-medium text-emerald-400">78%</span>
+                <span class="text-sm font-medium text-[#F04452]">78%</span>
             </div>
-            <p class="text-xs text-slate-400">최근 7일 뉴스/소셜 기반. 긍정 우세.</p>
+            <p class="text-xs text-muted">최근 7일 뉴스/소셜 기반. 긍정 우세.</p>
         </div>
 
         <!-- 기술적 분석 -->
-        <div class="bg-surface rounded-xl border border-slate-700 p-4 lg:p-5">
-            <h2 class="text-sm font-semibold text-slate-300 mb-3">기술적 지표</h2>
+        <div class="bg-surface rounded-card p-4 lg:p-5">
+            <h2 class="text-sm font-semibold text-white mb-3">기술적 지표</h2>
             <div class="space-y-2.5 text-sm">
                 <div class="flex justify-between">
-                    <span class="text-slate-400">RSI (14)</span>
-                    <span class="text-amber-400">72.3 (과매수 근접)</span>
+                    <span class="text-muted">RSI (14)</span>
+                    <span class="text-[#FF9F00]">72.3 (과매수 근접)</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-slate-400">MACD</span>
-                    <span class="text-emerald-400">강세 크로스</span>
+                    <span class="text-muted">MACD</span>
+                    <span class="text-[#F04452]">강세 크로스</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-slate-400">MA 50/200</span>
-                    <span class="text-emerald-400">골든크로스</span>
+                    <span class="text-muted">MA 50/200</span>
+                    <span class="text-[#F04452]">골든크로스</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-slate-400">볼린저밴드</span>
-                    <span class="text-amber-400">상단 접근</span>
+                    <span class="text-muted">볼린저밴드</span>
+                    <span class="text-[#FF9F00]">상단 접근</span>
                 </div>
             </div>
         </div>
@@ -114,53 +114,53 @@
 </div>
 
 <!-- AI 종합 분석 -->
-<div class="bg-surface rounded-xl border border-slate-700 p-4 lg:p-5">
+<div class="bg-surface rounded-card p-4 lg:p-5">
     <div class="flex items-center gap-2 mb-3">
-        <div class="w-6 h-6 bg-sky-500/20 rounded-md flex items-center justify-center">
-            <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="w-6 h-6 bg-toss/20 rounded-lg flex items-center justify-center">
+            <svg class="w-3.5 h-3.5 text-toss" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
             </svg>
         </div>
-        <h2 class="text-sm font-semibold text-slate-300">AI 종합 분석</h2>
-        <span class="text-xs text-slate-500">Gemini Flash</span>
+        <h2 class="text-sm font-semibold text-white">AI 종합 분석</h2>
+        <span class="text-xs text-muted">Gemini Flash</span>
     </div>
-    <div class="text-sm text-slate-300 leading-relaxed space-y-2">
+    <div class="text-sm text-muted leading-relaxed space-y-2">
         <p><strong class="text-white">종합 판단: 단기 과열 주의, 중장기 강세 유지</strong></p>
         <p>NVDA는 AI 인프라 수요 폭발로 펀더멘탈이 역대 최강 수준입니다. 매출 YoY +120%, 영업이익률 62%는 반도체 업종에서 이례적인 수치입니다.</p>
         <p>다만 RSI 72, 볼린저밴드 상단 접근, PER 65배는 단기적으로 과열 시그널입니다. CFO의 $5.2M 매도(Form 4)도 주의 요인입니다.</p>
-        <p class="text-sky-400">전략 제안: 현재가 매수보다는 $880~$900 구간 조정 시 분할 매수 권장. 기존 보유분은 홀딩.</p>
+        <p class="text-toss">전략 제안: 현재가 매수보다는 $880~$900 구간 조정 시 분할 매수 권장. 기존 보유분은 홀딩.</p>
     </div>
 </div>
 
 <!-- Mock 캔들 차트 -->
 <script>
-    const dates = [];
-    const open = [], high = [], low = [], close = [];
-    let price = 850;
-    for (let i = 30; i >= 0; i--) {
-        const d = new Date();
+    var dates = [];
+    var open = [], high = [], low = [], close = [];
+    var price = 850;
+    for (var i = 30; i >= 0; i--) {
+        var d = new Date();
         d.setDate(d.getDate() - i);
         dates.push(d.toISOString().split('T')[0]);
-        const o = price + (Math.random() - 0.48) * 20;
-        const c = o + (Math.random() - 0.45) * 25;
-        const h = Math.max(o, c) + Math.random() * 10;
-        const l = Math.min(o, c) - Math.random() * 10;
+        var o = price + (Math.random() - 0.48) * 20;
+        var c = o + (Math.random() - 0.45) * 25;
+        var h = Math.max(o, c) + Math.random() * 10;
+        var l = Math.min(o, c) - Math.random() * 10;
         open.push(o); high.push(h); low.push(l); close.push(c);
         price = c;
     }
 
     Plotly.newPlot('candle-chart', [{
-        x: dates, open, high, low, close,
+        x: dates, open: open, high: high, low: low, close: close,
         type: 'candlestick',
-        increasing: { line: { color: '#10B981' }, fillcolor: '#10B981' },
-        decreasing: { line: { color: '#EF4444' }, fillcolor: '#EF4444' },
+        increasing: { line: { color: '#F04452' }, fillcolor: '#F04452' },
+        decreasing: { line: { color: '#3182F6' }, fillcolor: '#3182F6' },
     }], {
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        font: { family: 'Pretendard', color: '#94A3B8', size: 11 },
+        font: { family: 'Pretendard', color: '#8B95A1', size: 11 },
         margin: { l: 50, r: 20, t: 10, b: 30 },
-        xaxis: { gridcolor: '#1E293B', rangeslider: { visible: false } },
-        yaxis: { gridcolor: '#1E293B', tickprefix: '$' },
+        xaxis: { gridcolor: '#2C2D33', rangeslider: { visible: false } },
+        yaxis: { gridcolor: '#2C2D33', tickprefix: '$' },
         showlegend: false,
     }, { responsive: true, displayModeBar: false });
 </script>

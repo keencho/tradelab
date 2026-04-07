@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Settings{% endblock %}
+
+{% block content %}
+<h2 class="text-lg font-bold text-white mb-6">워치리스트 관리</h2>
+<p class="text-sm text-muted mb-8">시그널 수집 대상 종목을 관리합니다. 종목을 추가하면 해당 종목의 이상 탐지가 시작됩니다.</p>
+
+<!-- 마켓 탭 -->
+<div class="flex gap-2 mb-6" id="market-tabs">
+    <button onclick="switchMarket('kr_stock')" data-market="kr_stock"
+        class="px-4 py-2 text-sm rounded-xl font-medium transition-colors bg-toss/10 text-toss">한국주식 <span class="text-xs opacity-60">(max 15)</span></button>
+    <button onclick="switchMarket('us_stock')" data-market="us_stock"
+        class="px-4 py-2 text-sm rounded-xl font-medium transition-colors text-muted active:bg-elevated">미국주식 <span class="text-xs opacity-60">(max 15)</span></button>
+    <button onclick="switchMarket('crypto')" data-market="crypto"
+        class="px-4 py-2 text-sm rounded-xl font-medium transition-colors text-muted active:bg-elevated">코인 <span class="text-xs opacity-60">(max 20)</span></button>
+</div>
+
+<!-- 종목 추가 -->
+<div class="bg-surface rounded-card p-4 lg:p-5 mb-6">
+    <h3 class="text-sm font-semibold text-white mb-3">종목 추가</h3>
+    <div class="relative">
+        <div class="flex gap-2">
+            <div class="relative flex-1">
+                <input type="text" id="search-input" placeholder="종목명 또는 코드 검색..."
+                    autocomplete="off"
+                    class="w-full bg-elevated border-0 rounded-xl px-4 py-3 text-sm text-white placeholder-muted focus:ring-2 focus:ring-toss focus:outline-none">
+                <!-- 자동완성 드롭다운 -->
+                <div id="search-results" class="hidden absolute left-0 right-0 top-full mt-1 bg-surface rounded-xl shadow-lg z-50 max-h-60 scroll-area border border-elevated"></div>
+            </div>
+            <button onclick="addSelected()" id="add-btn" disabled
+                class="px-4 py-3 text-sm rounded-xl bg-toss text-white font-medium disabled:opacity-30 disabled:cursor-not-allowed shrink-0">
+                추가
+            </button>
+        </div>
+    </div>
+    <p id="add-error" class="text-xs text-[#F04452] mt-2 hidden"></p>
+</div>
+
+<!-- 등록된 종목 리스트 -->
+<div class="bg-surface rounded-card p-4 lg:p-5">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold text-white">등록된 종목</h3>
+        <span id="count-label" class="text-xs text-muted"></span>
+    </div>
+    <div id="watchlist" class="space-y-2"></div>
+    <p id="empty-msg" class="text-xs text-muted text-center py-6 hidden">등록된 종목이 없습니다.</p>
+</div>
+
+<script>
+var currentMarket = 'kr_stock';
+var selectedTicker = null;
+var debounceTimer = null;
+
+function switchMarket(market) {
+    currentMarket = market;
+    selectedTicker = null;
+    document.getElementById('search-input').value = '';
+    document.getElementById('search-results').classList.add('hidden');
+    document.getElementById('add-btn').disabled = true;
+    document.getElementById('add-error').classList.add('hidden');
+
+    // 탭 스타일
+    document.querySelectorAll('#market-tabs button').forEach(function(btn) {
+        if (btn.dataset.market === market) {
+            btn.className = 'px-4 py-2 text-sm rounded-xl font-medium transition-colors bg-toss/10 text-toss';
+        } else {
+            btn.className = 'px-4 py-2 text-sm rounded-xl font-medium transition-colors text-muted active:bg-elevated';
+        }
+    });
+
+    loadWatchlist();
+}
+
+function loadWatchlist() {
+    fetch('/api/watchlist').then(function(r) { return r.json(); }).then(function(data) {
+        var filtered = data.filter(function(item) { return item.market === currentMarket; });
+        var container = document.getElementById('watchlist');
+        var emptyMsg = document.getElementById('empty-msg');
+        var maxMap = { kr_stock: 15, us_stock: 15, crypto: 20 };
+
+        document.getElementById('count-label').textContent = filtered.length + '/' + maxMap[currentMarket] + '종목';
+
+        if (filtered.length === 0) {
+            container.innerHTML = '';
+            emptyMsg.classList.remove('hidden');
+            return;
+        }
+
+        emptyMsg.classList.add('hidden');
+        container.innerHTML = filtered.map(function(item) {
+            return '<div class="flex items-center justify-between p-3 rounded-xl bg-elevated/50">' +
+                '<div class="flex items-center gap-2">' +
+                '<span class="text-sm font-semibold text-white">' + (item.name || item.ticker) + '</span>' +
+                (item.name ? '<span class="text-xs text-muted">' + item.ticker + '</span>' : '') +
+                '</div>' +
+                '<button onclick="removeItem(' + item.id + ')" class="text-xs text-muted hover:text-[#F04452] transition-colors px-2 py-1">삭제</button>' +
+                '</div>';
+        }).join('');
+    });
+}
+
+function removeItem(id) {
+    fetch('/api/watchlist/' + id, { method: 'DELETE' }).then(function(r) {
+        if (r.ok) loadWatchlist();
+    });
+}
+
+// 자동완성
+document.getElementById('search-input').addEventListener('input', function(e) {
+    var q = e.target.value.trim();
+    selectedTicker = null;
+    document.getElementById('add-btn').disabled = true;
+
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (q.length < 1) {
+        document.getElementById('search-results').classList.add('hidden');
+        return;
+    }
+
+    debounceTimer = setTimeout(function() {
+        fetch('/api/ticker/search?market=' + currentMarket + '&q=' + encodeURIComponent(q))
+            .then(function(r) { return r.json(); })
+            .then(function(results) {
+                var container = document.getElementById('search-results');
+                if (results.length === 0) {
+                    container.innerHTML = '<div class="p-3 text-xs text-muted">검색 결과 없음</div>';
+                    container.classList.remove('hidden');
+                    return;
+                }
+                container.innerHTML = results.map(function(item) {
+                    return '<div class="px-4 py-3 hover:bg-elevated active:bg-elevated cursor-pointer flex items-center justify-between" ' +
+                        'onclick="selectTicker(\'' + item.ticker.replace(/'/g, "\\'") + '\', \'' + item.name.replace(/'/g, "\\'") + '\')">' +
+                        '<span class="text-sm text-white">' + item.name + '</span>' +
+                        '<span class="text-xs text-muted">' + item.ticker + '</span>' +
+                        '</div>';
+                }).join('');
+                container.classList.remove('hidden');
+            });
+    }, 300);
+});
+
+function selectTicker(ticker, name) {
+    selectedTicker = { ticker: ticker, name: name };
+    document.getElementById('search-input').value = name + ' (' + ticker + ')';
+    document.getElementById('search-results').classList.add('hidden');
+    document.getElementById('add-btn').disabled = false;
+}
+
+function addSelected() {
+    if (!selectedTicker) return;
+    var errEl = document.getElementById('add-error');
+    errEl.classList.add('hidden');
+
+    fetch('/api/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            market: currentMarket,
+            ticker: selectedTicker.ticker,
+            name: selectedTicker.name,
+        }),
+    }).then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+    .then(function(result) {
+        if (result.ok) {
+            document.getElementById('search-input').value = '';
+            selectedTicker = null;
+            document.getElementById('add-btn').disabled = true;
+            loadWatchlist();
+        } else {
+            errEl.textContent = result.data.error || '추가 실패';
+            errEl.classList.remove('hidden');
+        }
+    });
+}
+
+// 외부 클릭 시 드롭다운 닫기
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('#search-input') && !e.target.closest('#search-results')) {
+        document.getElementById('search-results').classList.add('hidden');
+    }
+});
+
+// 초기 로드
+loadWatchlist();
+</script>
+{% endblock %}

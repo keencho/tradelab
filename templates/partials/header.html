@@ -1,49 +1,48 @@
-<header class="h-16 border-b border-slate-700 bg-surface/50 backdrop-blur-sm flex items-center justify-between px-4 lg:px-6">
-    <div class="flex items-center gap-3">
-        <!-- 모바일 햄버거 -->
-        <button onclick="toggleSidebar()" class="lg:hidden text-slate-400 hover:text-white">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-            </svg>
-        </button>
-        <h1 class="text-lg font-semibold text-white">
-            {% block page_title %}
-            {% if page == 'dashboard' %}대시보드
-            {% elif page == 'portfolio' %}포트폴리오
-            {% elif page == 'research' %}리서치
-            {% elif page == 'signals' %}시그널
-            {% elif page == 'news' %}뉴스
-            {% endif %}
-            {% endblock %}
-        </h1>
-    </div>
+<header class="shrink-0 safe-top bg-surface/80 backdrop-blur-sm">
+    <div class="h-14 flex items-center justify-between px-4 lg:px-6">
+        <div class="flex items-center gap-3">
+            <!-- 모바일 햄버거 -->
+            <button onclick="toggleSidebar()" class="lg:hidden text-muted hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+            </button>
+            <h1 class="text-lg font-semibold text-white">
+                {% block page_title %}
+                {% if page == 'dashboard' %}대시보드
+                {% elif page == 'portfolio' %}포트폴리오
+                {% elif page == 'research' %}리서치
+                {% elif page == 'signals' %}시그널
+                {% elif page == 'news' %}뉴스
+                {% endif %}
+                {% endblock %}
+            </h1>
+        </div>
 
-    {% if auth_enabled %}
-    <div class="flex items-center gap-3">
-        <!-- 세션 남은시간 -->
-        <span class="text-xs text-slate-500 hidden sm:inline" id="session-timer"></span>
-        <!-- 세션 리셋 -->
-        <button onclick="resetSession()" title="세션 갱신 (24h 리셋)"
-                class="text-slate-500 hover:text-white transition-colors">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-            </svg>
-        </button>
-        <!-- 로그아웃 -->
-        <button onclick="doLogout()" title="로그아웃"
-                class="text-slate-500 hover:text-red-400 transition-colors">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-            </svg>
-        </button>
+        {% if auth_enabled %}
+        <div class="flex items-center gap-3">
+            <span class="text-xs text-muted hidden sm:inline" id="session-timer"></span>
+            <button onclick="resetSession()" title="세션 갱신"
+                    class="text-muted hover:text-white transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+            </button>
+            <button onclick="doLogout()" title="로그아웃"
+                    class="text-muted hover:text-[#F04452] transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                </svg>
+            </button>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 </header>
 
 {% if auth_enabled %}
 <script>
-    const SESSION_KEY = 'tl_session_end';
-    let sessionEnd = parseInt(localStorage.getItem(SESSION_KEY));
+    var SESSION_KEY = 'tl_session_end';
+    var sessionEnd = parseInt(localStorage.getItem(SESSION_KEY));
 
     if (!sessionEnd || isNaN(sessionEnd)) {
         sessionEnd = Date.now() + 24 * 3600 * 1000;
@@ -51,38 +50,36 @@
     }
 
     function updateSessionTimer() {
-        const remaining = Math.max(0, sessionEnd - Date.now());
-        const el = document.getElementById('session-timer');
+        var remaining = Math.max(0, sessionEnd - Date.now());
+        var el = document.getElementById('session-timer');
+        if (!el) return;
         if (remaining === 0) {
             el.textContent = 'expired';
-            el.classList.add('text-red-400');
+            el.classList.add('text-[#F04452]');
             return;
         }
-        const h = Math.floor(remaining / 3600000);
-        const m = Math.floor((remaining % 3600000) / 60000);
-        const s = Math.floor((remaining % 60000) / 1000);
+        var h = Math.floor(remaining / 3600000);
+        var m = Math.floor((remaining % 3600000) / 60000);
+        var s = Math.floor((remaining % 60000) / 1000);
         el.textContent = h + 'h ' + String(m).padStart(2, '0') + 'm ' + String(s).padStart(2, '0') + 's';
     }
 
     function resetSession() {
         fetch('/api/session/reset', { method: 'POST' })
-            .then(r => {
+            .then(function(r) {
                 if (r.ok) {
                     sessionEnd = Date.now() + 24 * 3600 * 1000;
                     localStorage.setItem(SESSION_KEY, sessionEnd);
                     updateSessionTimer();
-                    const btn = document.querySelector('[title*="세션"]');
-                    btn.classList.add('text-emerald-400');
-                    setTimeout(() => btn.classList.remove('text-emerald-400'), 1500);
                 }
             });
     }
 
     function doLogout() {
         fetch('/api/logout', { method: 'POST' })
-            .then(() => {
+            .then(function() {
                 localStorage.removeItem(SESSION_KEY);
-                window.location.reload();
+                window.location.href = '/login';
             });
     }
 

@@ -56,6 +56,56 @@ for pair in _raw_users.split(","):
         u, p = pair.strip().split(":", 1)
         AUTH_USERS[u] = p
 
+# --- 워치리스트 제한 ---
+MAX_WATCHLIST = {
+    "kr_stock": 15,
+    "us_stock": 15,
+    "crypto": 20,
+}
+
+MARKET_NAMES = {
+    "kr_stock": "한국주식",
+    "us_stock": "미국주식",
+    "crypto": "코인",
+    "macro": "매크로",
+}
+
+SIGNAL_TYPE_NAMES = {
+    "foreign_net_buy": "외국인 순매수",
+    "institutional_net_buy": "기관 순매수",
+    "short_ratio": "공매도 비중",
+    "program_buy": "프로그램 매매",
+    "funding_rate": "펀딩레이트",
+    "open_interest": "미결제약정",
+    "fear_greed": "공포/탐욕지수",
+    "whale_transfer": "고래 이체",
+    "reddit_buzz": "Reddit 버즈",
+    "naver_buzz": "네이버 버즈",
+    "insider_buy": "내부자 매수",
+    "insider_sell": "내부자 매도",
+    "insider_trade": "내부자 거래",
+    "us_vix": "변동성지수(VIX)",
+    "us_yield_spread": "장단기 금리차",
+    "price_vs_close": "전일 대비 급등락",
+    "price_momentum": "장중 급등락",
+    "volume_spike": "거래량 급증",
+    "us_cpi": "미국 CPI",
+    "us_fed_rate": "연방기금금리",
+    "us_unemployment": "미국 실업률",
+    "kr_base_rate": "한국 기준금리",
+    "kr_cpi": "한국 CPI",
+    "kr_unemployment": "한국 실업률",
+}
+
+# --- 가격 알림 기준 (%) ---
+PRICE_ALERT_VS_CLOSE = 5.0    # 전일 종가 대비 ±5%
+PRICE_ALERT_MOMENTUM = 3.0    # 직전 수집가 대비 ±3%
+
+# --- 쿨다운 (분) ---
+COOLDOWN_VS_CLOSE = 120       # 전일 대비: 2시간
+COOLDOWN_MOMENTUM = 30        # 직전 대비: 30분
+COOLDOWN_DEFAULT = 60         # 기타 시그널: 1시간
+
 # --- 가상매매 ---
 DEFAULT_CAPITAL = 100_000_000  # 1억원
 STOCK_FEE_RATE = 0.00015      # 주식 수수료 0.015%

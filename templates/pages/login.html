@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>TradeLab</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/icon-180.png">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#3182F6">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="TradeLab">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Pretendard', 'sans-serif'] },
+                    colors: {
+                        base: '#17171B',
+                        surface: '#212226',
+                        elevated: '#2C2D33',
+                        muted: '#8B95A1',
+                        toss: '#3182F6',
+                        white: '#F2F4F6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        input { font-size: 16px !important; }
+    </style>
+</head>
+<body class="bg-ground text-white font-sans h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-sm">
+        <!-- 로고 -->
+        <div class="flex flex-col items-center mb-10">
+            <div class="w-14 h-14 bg-toss rounded-2xl flex items-center justify-center mb-4">
+                <svg class="w-9 h-9 text-white" fill="none" stroke="currentColor" viewBox="0 0 32 32">
+                    <path d="M5 7h10" stroke-width="3" stroke-linecap="round"/>
+                    <path d="M10 7v16" stroke-width="3" stroke-linecap="round"/>
+                    <path d="M18 7v16h9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold tracking-tight">TradeLab</h1>
+        </div>
+
+        <!-- 로그인 폼 -->
+        <form id="login-form" class="space-y-4">
+            <div>
+                <input type="text" id="username" name="username" placeholder="아이디" autocomplete="username" required
+                    class="w-full bg-surface border-0 rounded-2xl px-4 py-3.5 text-sm text-white placeholder-muted focus:ring-2 focus:ring-toss focus:outline-none">
+            </div>
+            <div>
+                <input type="password" id="password" name="password" placeholder="비밀번호" autocomplete="current-password" required
+                    class="w-full bg-surface border-0 rounded-2xl px-4 py-3.5 text-sm text-white placeholder-muted focus:ring-2 focus:ring-toss focus:outline-none">
+            </div>
+            <button type="submit" id="login-btn"
+                class="w-full bg-toss hover:bg-toss/90 text-white font-semibold py-3.5 rounded-2xl transition-colors text-sm">
+                로그인
+            </button>
+            <p id="login-error" class="text-xs text-[#F04452] text-center hidden"></p>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('login-btn');
+            const err = document.getElementById('login-error');
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            btn.disabled = true;
+            btn.textContent = '로그인 중...';
+            err.classList.add('hidden');
+
+            try {
+                // PWA standalone 감지 → 쿠키 설정
+                const isPWA = window.matchMedia('(display-mode: standalone)').matches
+                           || window.navigator.standalone === true;
+                if (isPWA) {
+                    document.cookie = 'tl_pwa=1; path=/; max-age=31536000; SameSite=Lax';
+                }
+
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                if (res.ok) {
+                    // 세션 타이머 초기화 (PWA: 30일, 브라우저: 24시간)
+                    const ttl = isPWA ? 30 * 24 * 3600 * 1000 : 24 * 3600 * 1000;
+                    localStorage.setItem('tl_session_end', Date.now() + ttl);
+                    window.location.href = '/';
+                } else {
+                    const data = await res.json();
+                    err.textContent = data.error || '아이디 또는 비밀번호가 올바르지 않습니다.';
+                    err.classList.remove('hidden');
+                }
+            } catch {
+                err.textContent = '서버에 연결할 수 없습니다.';
+                err.classList.remove('hidden');
+            }
+
+            btn.disabled = false;
+            btn.textContent = '로그인';
+        });
+    </script>
+</body>
+</html>
