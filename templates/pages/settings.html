@@ -117,6 +117,11 @@ document.getElementById('search-input').addEventListener('input', function(e) {
         return;
     }
 
+    // 검색 중 표시
+    var sr = document.getElementById('search-results');
+    sr.innerHTML = '<div class="p-3 text-xs text-muted flex items-center gap-2"><div class="w-3 h-3 border border-toss/30 border-t-toss rounded-full animate-spin"></div>검색 중...</div>';
+    sr.classList.remove('hidden');
+
     debounceTimer = setTimeout(function() {
         fetch('/api/ticker/search?market=' + currentMarket + '&q=' + encodeURIComponent(q))
             .then(function(r) { return r.json(); })

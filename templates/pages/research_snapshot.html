@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+{% block title_suffix %} — {{ rt.ticker_name or rt.ticker }} ({{ h.created_at.strftime('%m/%d %H:%M') }}){% endblock %}
+
+{% block head_extra %}
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+{% endblock %}
+
+{% block content %}
+<!-- 헤더 -->
+<div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+        <a href="/research/ticker/{{ rt.ticker }}" class="text-muted hover:text-white transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </a>
+        <div>
+            <h1 class="text-lg font-bold text-white">{{ rt.ticker_name or rt.ticker }}</h1>
+            <p class="text-xs text-muted">{{ rt.ticker }} · {% if rt.market == 'kr_stock' %}한국주식{% elif rt.market == 'us_stock' %}미국주식{% elif rt.market == 'crypto' %}코인{% else %}{{ rt.market }}{% endif %} · {{ h.created_at.strftime('%Y-%m-%d %H:%M') }} 분석</p>
+        </div>
+    </div>
+    <a href="/research/ticker/{{ rt.ticker }}"
+       class="px-4 py-2.5 bg-elevated hover:bg-elevated/80 text-white text-sm font-medium rounded-xl transition-colors">
+        이력으로
+    </a>
+</div>
+
+<!-- 가격 카드 -->
+<div class="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4 mb-6">
+    <div class="bg-surface rounded-card p-4 lg:p-5">
+        <p class="text-xs text-muted mb-1">분석 시점 가격</p>
+        <p class="text-xl lg:text-2xl font-bold text-white">
+            {% if h.market in ('crypto', 'us_stock') %}${{ '{:,.2f}'.format(h.price) }}{% else %}{{ '{:,.0f}'.format(h.price) }}원{% endif %}
+        </p>
+        <p class="text-sm mt-1 {{ 'text-[#F04452]' if h.change_pct >= 0 else 'text-toss' }}">
+            {{ '+' if h.change_pct > 0 else '' }}{{ '%.1f'|format(h.change_pct) }}%
+        </p>
+    </div>
+    <div class="bg-surface rounded-card p-4 lg:p-5">
+        <p class="text-xs text-muted mb-1">전일 종가</p>
+        <p class="text-xl lg:text-2xl font-bold text-white">
+            {% if h.market in ('crypto', 'us_stock') %}${{ '{:,.2f}'.format(h.prev_close) }}{% else %}{{ '{:,.0f}'.format(h.prev_close) }}원{% endif %}
+        </p>
+    </div>
+    <div class="bg-surface rounded-card p-4 lg:p-5 col-span-2 lg:col-span-1">
+        <p class="text-xs text-muted mb-1">분석 시점</p>
+        <p class="text-lg font-bold text-white">{{ h.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+        <p class="text-xs text-muted mt-1">이 데이터는 분석 당시 기준입니다</p>
+    </div>
+</div>
+
+<!-- 캔들 차트 -->
+<div class="bg-surface rounded-card p-4 lg:p-5 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+        <div class="flex items-center gap-2">
+            <h2 class="text-sm font-semibold text-white">차트</h2>
+            <button id="hl-toggle" onclick="toggleHighLow()" class="px-2 py-0.5 text-xs rounded-lg bg-toss/10 text-toss transition-colors">고/저</button>
+        </div>
+        <div class="flex gap-1 flex-wrap">
+            <!-- 분봉 -->
+            <div class="flex gap-0.5 mr-2 pr-2 border-r border-elevated" id="interval-btns">
+                {% for iv, label in [('1min','1분'),('5min','5분'),('15min','15분'),('30min','30분'),('60min','60분')] %}
+                <button onclick="loadChartInterval('{{ iv }}')" data-interval="{{ iv }}"
+                    class="px-1.5 py-1 text-xs rounded-lg text-muted hover:text-white transition-colors">{{ label }}</button>
+                {% endfor %}
+            </div>
+            <!-- 일/주/월봉 -->
+            <div class="flex gap-0.5 mr-2 pr-2 border-r border-elevated" id="candle-btns">
+                {% for iv, label in [('D','일'),('W','주'),('M','월')] %}
+                <button onclick="loadChartPeriod('{{ iv }}', currentPeriod)" data-interval="{{ iv }}"
+                    class="px-1.5 py-1 text-xs rounded-lg {{ 'bg-toss/10 text-toss' if iv == 'D' else 'text-muted hover:text-white' }} transition-colors">{{ label }}</button>
+                {% endfor %}
+            </div>
+            <!-- 기간 -->
+            <div class="flex gap-0.5" id="period-btns">
+                {% for p, label in [('1m','1개월'),('3m','3개월'),('6m','6개월'),('1y','1년'),('3y','3년')] %}
+                <button onclick="loadChartPeriod(currentCandleType, '{{ p }}')" data-period="{{ p }}"
+                    class="px-1.5 py-1 text-xs rounded-lg {{ 'bg-toss/10 text-toss' if p == '3m' else 'text-muted hover:text-white' }} transition-colors">{{ label }}</button>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div id="chart-legend" class="flex gap-4 text-xs text-muted mb-2 h-4"></div>
+    <div id="chart-container" style="height: 380px;"></div>
+</div>
+
+<!-- AI 리포트 + 사이드 -->
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
+    <!-- AI 리포트 -->
+    <div class="lg:col-span-3 bg-surface rounded-card p-4 lg:p-5">
+        <div class="flex items-center gap-2 mb-3">
+            <div class="w-6 h-6 bg-toss/20 rounded-lg flex items-center justify-center">
+                <svg class="w-3.5 h-3.5 text-toss" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                </svg>
+            </div>
+            <h2 class="text-sm font-semibold text-white">AI 종합 분석</h2>
+        </div>
+        {% if h.ai_report %}
+        <p class="text-sm text-muted leading-relaxed" style="white-space: pre-line;">{{ h.ai_report }}</p>
+        {% else %}
+        <p class="text-sm text-muted">분석 데이터 부족</p>
+        {% endif %}
+    </div>
+
+    <!-- 뉴스 + 시그널 -->
+    <div class="lg:col-span-2 space-y-4">
+        <!-- 뉴스 -->
+        <div class="bg-surface rounded-card p-4 lg:p-5">
+            <h2 class="text-sm font-semibold text-white mb-3">분석 시점 뉴스</h2>
+            {% if h.news_data %}
+            <div class="space-y-2.5">
+                {% for n in h.news_data %}
+                <a href="{{ n.url or '#' }}" target="_blank"
+                   class="block text-xs text-muted hover:text-white transition-colors leading-relaxed">
+                    {{ n.title }}
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-xs text-muted text-center py-3">관련 뉴스 없음</p>
+            {% endif %}
+        </div>
+
+        <!-- 시그널 -->
+        <div class="bg-surface rounded-card p-4 lg:p-5">
+            <h2 class="text-sm font-semibold text-white mb-3">분석 시점 시그널</h2>
+            {% if h.signals_data %}
+            <div class="space-y-2">
+                {% for s in h.signals_data %}
+                <div class="flex items-start gap-2 text-xs leading-relaxed">
+                    <span class="shrink-0">{% if s.direction == 'bullish' %}<span class="text-[#F04452]">▲</span>{% else %}<span class="text-toss">▼</span>{% endif %}</span>
+                    <div class="flex-1">
+                        <span class="text-white">{{ s.signal_type }}</span>
+                        <span class="text-muted"> — {{ s.description }}</span>
+                        {% if s.date %}<span class="text-muted/50 ml-1">{{ s.date }}</span>{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-xs text-muted text-center py-3">관련 시그널 없음</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+var chart = null;
+var candleSeries = null;
+var volumeSeries = null;
+var currentCandleType = 'D';
+var currentPeriod = '3m';
+var isKr = '{{ rt.market }}' === 'kr_stock';
+var isCrypto = '{{ rt.market }}' === 'crypto';
+
+function fmt(v) {
+    if (isKr) return v.toLocaleString() + '원';
+    return '$' + v.toLocaleString(undefined, {minimumFractionDigits: 2});
+}
+
+function initChart() {
+    var container = document.getElementById('chart-container');
+    chart = LightweightCharts.createChart(container, {
+        layout: {
+            background: { type: 'solid', color: 'transparent' },
+            textColor: '#8B95A1',
+            fontFamily: 'Pretendard',
+        },
+        grid: {
+            vertLines: { color: '#2C2D33' },
+            horzLines: { color: '#2C2D33' },
+        },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        rightPriceScale: { borderColor: '#2C2D33' },
+        timeScale: {
+            borderColor: '#2C2D33',
+            timeVisible: false,
+            tickMarkFormatter: function(time, tickMarkType, locale) {
+                if (typeof time === 'number') {
+                    var d = new Date(time * 1000);
+                    var mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+                    var dd = String(d.getUTCDate()).padStart(2, '0');
+                    var hh = String(d.getUTCHours()).padStart(2, '0');
+                    var mi = String(d.getUTCMinutes()).padStart(2, '0');
+                    return mm + '-' + dd + ' ' + hh + ':' + mi;
+                }
+                return time;
+            },
+        },
+        localization: {
+            timeFormatter: function(time) {
+                if (typeof time === 'number') {
+                    var d = new Date(time * 1000);
+                    var y = d.getUTCFullYear();
+                    var mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+                    var dd = String(d.getUTCDate()).padStart(2, '0');
+                    var hh = String(d.getUTCHours()).padStart(2, '0');
+                    var mi = String(d.getUTCMinutes()).padStart(2, '0');
+                    return y + '-' + mm + '-' + dd + ' ' + hh + ':' + mi;
+                }
+                return time;
+            },
+        },
+    });
+
+    var priceFormat = isKr
+        ? { type: 'price', precision: 0, minMove: 1 }
+        : { type: 'price', precision: 2, minMove: 0.01 };
+
+    candleSeries = chart.addCandlestickSeries({
+        upColor: '#F04452',
+        downColor: '#3182F6',
+        borderUpColor: '#F04452',
+        borderDownColor: '#3182F6',
+        wickUpColor: '#F04452',
+        wickDownColor: '#3182F6',
+        priceFormat: priceFormat,
+    });
+
+    volumeSeries = chart.addHistogramSeries({
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'volume',
+    });
+    chart.priceScale('volume').applyOptions({
+        scaleMargins: { top: 0.8, bottom: 0 },
+    });
+
+    // OHLC 레전드
+    var legend = document.getElementById('chart-legend');
+    chart.subscribeCrosshairMove(function(param) {
+        if (!param || !param.time || !param.seriesData) { legend.innerHTML = ''; return; }
+        var d = param.seriesData.get(candleSeries);
+        if (!d) return;
+        var color = d.close >= d.open ? '#F04452' : '#3182F6';
+        var change = ((d.close - d.open) / d.open * 100).toFixed(2);
+        var sign = change >= 0 ? '+' : '';
+        legend.innerHTML =
+            '<span>시 <span class="text-white">' + fmt(d.open) + '</span></span>' +
+            '<span>고 <span class="text-[#F04452]">' + fmt(d.high) + '</span></span>' +
+            '<span>저 <span class="text-toss">' + fmt(d.low) + '</span></span>' +
+            '<span>종 <span style="color:' + color + '">' + fmt(d.close) + '</span></span>' +
+            '<span style="color:' + color + '">' + sign + change + '%</span>';
+    });
+
+    // 화면 범위 변경 시 최고/최저 업데이트
+    chart.timeScale().subscribeVisibleLogicalRangeChange(function() {
+        updateHighLow();
+    });
+
+    loadChartPeriod('D', '3m');
+}
+
+var currentData = [];
+
+function updateHighLow() {
+    if (!hlEnabled) { candleSeries.setMarkers([]); return; }
+    var range = chart.timeScale().getVisibleLogicalRange();
+    if (!range || currentData.length === 0) return;
+
+    var from = Math.max(0, Math.floor(range.from));
+    var to = Math.min(currentData.length - 1, Math.ceil(range.to));
+
+    var highest = -Infinity, lowest = Infinity;
+    var highIdx = from, lowIdx = from;
+    for (var i = from; i <= to; i++) {
+        var d = currentData[i];
+        if (d.high > highest) { highest = d.high; highIdx = i; }
+        if (d.low < lowest) { lowest = d.low; lowIdx = i; }
+    }
+
+    if (highest === -Infinity) return;
+
+    // 마커로 최고/최저 표시
+    var markers = [];
+    markers.push({
+        time: currentData[highIdx].time,
+        position: 'aboveBar',
+        color: '#F04452',
+        shape: 'arrowDown',
+        size: 1,
+        text: fmt(highest),
+    });
+    markers.push({
+        time: currentData[lowIdx].time,
+        position: 'belowBar',
+        color: '#3182F6',
+        shape: 'arrowUp',
+        size: 1,
+        text: fmt(lowest),
+    });
+
+    // time 기준 정렬 (필수)
+    markers.sort(function(a, b) { return a.time < b.time ? -1 : a.time > b.time ? 1 : 0; });
+    candleSeries.setMarkers(markers);
+}
+
+var hlEnabled = true;
+
+function toggleHighLow() {
+    hlEnabled = !hlEnabled;
+    var btn = document.getElementById('hl-toggle');
+    btn.className = 'px-2 py-0.5 text-xs rounded-lg transition-colors ' +
+        (hlEnabled ? 'bg-toss/10 text-toss' : 'bg-elevated text-muted');
+    if (hlEnabled) {
+        updateHighLow();
+    } else {
+        candleSeries.setMarkers([]);
+    }
+}
+
+function updateAllBtns() {
+    var isIntraday = currentCandleType.includes('min');
+    // 분봉 버튼
+    document.querySelectorAll('#interval-btns button').forEach(function(btn) {
+        btn.className = 'px-1.5 py-1 text-xs rounded-lg transition-colors ' +
+            (btn.dataset.interval === currentCandleType ? 'bg-toss/10 text-toss' : 'text-muted hover:text-white');
+    });
+    // 일/주/월 버튼
+    document.querySelectorAll('#candle-btns button').forEach(function(btn) {
+        btn.className = 'px-1.5 py-1 text-xs rounded-lg transition-colors ' +
+            (!isIntraday && btn.dataset.interval === currentCandleType ? 'bg-toss/10 text-toss' : 'text-muted hover:text-white');
+    });
+    // 기간 버튼 (분봉일 때 비활성)
+    document.querySelectorAll('#period-btns button').forEach(function(btn) {
+        if (isIntraday) {
+            btn.className = 'px-1.5 py-1 text-xs rounded-lg transition-colors text-muted/30 cursor-not-allowed';
+        } else {
+            btn.className = 'px-1.5 py-1 text-xs rounded-lg transition-colors ' +
+                (btn.dataset.period === currentPeriod ? 'bg-toss/10 text-toss' : 'text-muted hover:text-white');
+        }
+    });
+}
+
+function loadChartInterval(interval) {
+    currentCandleType = interval;
+    updateAllBtns();
+    chart.applyOptions({ timeScale: { timeVisible: true, secondsVisible: false } });
+    fetch('/api/chart/{{ rt.ticker }}?market={{ rt.market }}&interval=' + interval)
+        .then(function(r) { return r.json(); })
+        .then(function(data) { renderCandles(data); });
+}
+
+function loadChartPeriod(interval, period) {
+    currentCandleType = interval;
+    currentPeriod = period;
+    updateAllBtns();
+    chart.applyOptions({ timeScale: { timeVisible: false } });
+    fetch('/api/chart/{{ rt.ticker }}?market={{ rt.market }}&interval=' + interval + '&period=' + period)
+        .then(function(r) { return r.json(); })
+        .then(function(data) { renderCandles(data); });
+}
+
+function renderCandles(data) {
+    if (!data || data.length === 0) return;
+    currentData = data;
+
+    candleSeries.setData(data.map(function(d) {
+        return { time: d.time, open: d.open, high: d.high, low: d.low, close: d.close };
+    }));
+
+    volumeSeries.setData(data.map(function(d) {
+        return {
+            time: d.time, value: d.volume,
+            color: d.close >= d.open ? 'rgba(240,68,82,0.3)' : 'rgba(49,130,246,0.3)',
+        };
+    }));
+
+    chart.timeScale().fitContent();
+    updateHighLow();
+}
+
+if (typeof LightweightCharts !== 'undefined') {
+    initChart();
+} else {
+    window.addEventListener('load', initChart);
+}
+</script>
+{% endblock %}

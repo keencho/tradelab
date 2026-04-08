@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title_suffix %} — {{ rt.ticker_name or rt.ticker }}{% endblock %}
+
+{% block content %}
+<!-- 헤더 -->
+<div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+        <a href="/research" class="text-muted hover:text-white transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </a>
+        <div>
+            <h1 class="text-lg font-bold text-white">{{ rt.ticker_name or rt.ticker }}</h1>
+            <p class="text-xs text-muted">{{ rt.ticker }} · {% if rt.market == 'kr_stock' %}한국주식{% elif rt.market == 'us_stock' %}미국주식{% elif rt.market == 'crypto' %}코인{% else %}{{ rt.market }}{% endif %}</p>
+        </div>
+    </div>
+    <button id="re-research-btn" onclick="reResearch()"
+        class="px-4 py-2.5 bg-toss hover:bg-toss/90 active:bg-toss/80 text-white text-sm font-semibold rounded-xl transition-colors">
+        다시 분석하기
+    </button>
+</div>
+
+<!-- 로딩 -->
+<div id="loading" class="hidden text-center py-20">
+    <div class="inline-block w-8 h-8 border-2 border-toss/30 border-t-toss rounded-full animate-spin mb-3"></div>
+    <p class="text-sm text-muted">분석 중... (최대 30초)</p>
+</div>
+
+<!-- 이력 리스트 -->
+<div id="history-list" class="bg-surface rounded-card p-4 lg:p-5">
+    <h2 class="text-sm font-semibold text-white mb-4">분석 이력 ({{ histories|length }}회)</h2>
+    <div class="space-y-1">
+        {% if histories %}
+        {% for h in histories %}
+        <a href="/research/history/{{ h.id }}"
+           class="flex items-center justify-between p-3 rounded-xl hover:bg-elevated transition-colors">
+            <div class="flex items-center gap-3">
+                <span class="text-sm text-white">{{ h.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                {% if h.change_pct != 0 %}
+                <span class="text-xs font-medium {{ 'text-[#F04452]' if h.change_pct > 0 else 'text-toss' }}">
+                    {{ '+' if h.change_pct > 0 else '' }}{{ '%.1f'|format(h.change_pct) }}%
+                </span>
+                {% endif %}
+            </div>
+            <div class="flex items-center gap-3">
+                {% if h.ai_report %}
+                <span class="text-xs text-muted max-w-[300px] truncate hidden lg:inline">{{ h.ai_report[:80] }}...</span>
+                {% endif %}
+                <svg class="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+            </div>
+        </a>
+        {% endfor %}
+        {% else %}
+        <p class="text-xs text-muted text-center py-8">아직 분석 이력이 없습니다.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function reResearch() {
+    document.getElementById('history-list').classList.add('hidden');
+    document.getElementById('loading').classList.remove('hidden');
+    document.getElementById('re-research-btn').disabled = true;
+
+    fetch('/api/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            ticker: '{{ rt.ticker }}',
+            ticker_name: '{{ rt.ticker_name }}',
+            market: '{{ rt.market }}',
+        }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        // 새 스냅샷으로 이동
+        window.location.href = '/research/history/' + data.id;
+    })
+    .catch(function() {
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('history-list').classList.remove('hidden');
+        document.getElementById('re-research-btn').disabled = false;
+        alert('분석 중 에러가 발생했습니다.');
+    });
+}
+</script>
+{% endblock %}

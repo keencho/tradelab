@@ -47,6 +47,22 @@ class News(Base):
     analyzed_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
 
 
+class Watchlist(Base):
+    """워치리스트 — 시그널 감지 + 데이터 수집 대상 종목"""
+    __tablename__ = "watchlist"
+    __table_args__ = (
+        UniqueConstraint("market", "ticker", name="uq_watchlist"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    market: Mapped[str] = mapped_column(String(10), index=True)
+    ticker: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(100))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
+
+
 class SignalData(Base):
     """시그널 원본 데이터 (주기적 수집, z-score 계산용)"""
     __tablename__ = "signal_data"

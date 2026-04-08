@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_
 
-from config import AUTH_ENABLED, get_logger
+from config import AUTH_ENABLED, MARKET_NAMES, SIGNAL_TYPE_NAMES, get_logger
 from db.database import SessionLocal
 from db.models import News, Signal
 from routes.auth import require_auth, create_session, COOKIE_NAME, _get_client_ip
@@ -13,6 +13,14 @@ from routes.auth import require_auth, create_session, COOKIE_NAME, _get_client_i
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 logger = get_logger("auth")
+
+# Jinja2 커스텀 필터
+templates.env.filters["market_kr"] = lambda v: MARKET_NAMES.get(v, v)
+templates.env.filters["signal_type_kr"] = lambda v: SIGNAL_TYPE_NAMES.get(v, v)
+templates.env.filters["z_label"] = lambda z: (
+    f"평소 대비 {abs(z):.1f}배 ({'매우 이례적' if abs(z) >= 3 else '이례적' if abs(z) >= 2.5 else '주의'})"
+    if z else ""
+)
 
 
 # ── Mock 데이터 ──────────────────────────────────────────────
@@ -144,23 +152,96 @@ async def portfolio(request: Request):
     })
 
 
+@router.get("/settings", response_class=HTMLResponse)
+async def settings(request: Request):
+    return _page_response(request, "pages/settings.html", {
+        "request": request,
+        "page": "settings",
+    })
+
+
 @router.get("/research", response_class=HTMLResponse)
 async def research(request: Request):
-    # 리서치한 종목 리스트
     from db.models import ResearchTicker, ResearchHistory
     session = SessionLocal()
     try:
         tickers = session.query(ResearchTicker).order_by(
             ResearchTicker.last_researched_at.desc()
         ).limit(30).all()
+
+        # 각 종목의 분석 횟수
+        counts = {}
+        ticker_ids = [t.id for t in tickers]
+        if ticker_ids:
+            from sqlalchemy import func as sqlfunc
+            count_rows = (
+                session.query(ResearchHistory.research_ticker_id, sqlfunc.count(ResearchHistory.id))
+                .filter(ResearchHistory.research_ticker_id.in_(ticker_ids))
+                .group_by(ResearchHistory.research_ticker_id)
+                .all()
+            )
+            counts = {row[0]: row[1] for row in count_rows}
+
+        return _page_response(request, "pages/research.html", {
+            "request": request,
+            "page": "research",
+            "research_tickers": tickers,
+            "research_counts": counts,
+        })
     finally:
         session.close()
 
-    return _page_response(request, "pages/research.html", {
-        "request": request,
-        "page": "research",
-        "research_tickers": tickers,
-    })
+
+@router.get("/research/ticker/{ticker}", response_class=HTMLResponse)
+async def research_ticker_detail(request: Request, ticker: str):
+    """종목별 리서치 이력 페이지."""
+    from db.models import ResearchTicker, ResearchHistory
+    session = SessionLocal()
+    try:
+        rt = session.query(ResearchTicker).filter(ResearchTicker.ticker == ticker).first()
+        if not rt:
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url="/research")
+
+        histories = (
+            session.query(ResearchHistory)
+            .filter(ResearchHistory.research_ticker_id == rt.id)
+            .order_by(ResearchHistory.created_at.desc())
+            .limit(50)
+            .all()
+        )
+
+        return _page_response(request, "pages/research_detail.html", {
+            "request": request,
+            "page": "research",
+            "rt": rt,
+            "histories": histories,
+        })
+    finally:
+        session.close()
+
+
+@router.get("/research/history/{history_id}", response_class=HTMLResponse)
+async def research_history_view(request: Request, history_id: int):
+    """리서치 스냅샷 보기."""
+    from db.models import ResearchTicker, ResearchHistory
+    session = SessionLocal()
+    try:
+        h = session.query(ResearchHistory).filter(ResearchHistory.id == history_id).first()
+        if not h:
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url="/research")
+
+        rt = session.query(ResearchTicker).filter(ResearchTicker.id == h.research_ticker_id).first()
+
+        return _page_response(request, "pages/research_snapshot.html", {
+            "request": request,
+            "page": "research",
+            "rt": rt,
+            "h": h,
+        })
+    finally:
+        session.close()
 
 
 SIGNALS_PER_PAGE = 20

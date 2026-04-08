@@ -124,7 +124,7 @@ def call_llm(prompt: str, max_retries: int = 2) -> str | None:
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:
                     if attempt < max_retries - 1:
-                        wait = (attempt + 1) * 10  # 10초, 20초 대기
+                        wait = (attempt + 1) * 3  # 3초, 6초 대기
                         logger.warning(f"LLM rate limit: {provider.name}, {wait}초 후 재시도 ({attempt + 1}/{max_retries})")
                         time.sleep(wait)
                         continue

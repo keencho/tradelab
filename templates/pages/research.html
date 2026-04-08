@@ -9,7 +9,6 @@
             <input type="text" id="research-input" placeholder="종목명 또는 코드 검색 (삼성전자, AAPL, BTC ...)"
                 autocomplete="off"
                 class="w-full bg-elevated border-0 rounded-xl px-4 py-3 text-sm text-white placeholder-muted focus:ring-2 focus:ring-toss focus:outline-none">
-            <!-- 자동완성 드롭다운 -->
             <div id="search-results" class="hidden absolute left-0 right-0 top-full mt-1 bg-surface rounded-xl shadow-lg z-50 max-h-60 scroll-area border border-elevated"></div>
         </div>
         <button id="research-btn" onclick="runResearch()" disabled
@@ -22,88 +21,35 @@
 <!-- 로딩 -->
 <div id="loading" class="hidden text-center py-20">
     <div class="inline-block w-8 h-8 border-2 border-toss/30 border-t-toss rounded-full animate-spin mb-3"></div>
-    <p class="text-sm text-muted">분석 중...</p>
+    <p class="text-sm text-muted">분석 중... (최대 30초)</p>
 </div>
 
-<!-- 분석 결과 (동적) -->
-<div id="research-result" class="hidden">
-    <!-- 가격 카드 -->
-    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4 mb-6">
-        <div class="bg-surface rounded-card p-4 lg:p-5">
-            <p class="text-xs text-muted mb-1">종목</p>
-            <p id="res-name" class="text-lg lg:text-xl font-bold text-white"></p>
-            <p id="res-ticker" class="text-xs text-muted mt-1"></p>
-        </div>
-        <div class="bg-surface rounded-card p-4 lg:p-5">
-            <p class="text-xs text-muted mb-1">현재가</p>
-            <p id="res-price" class="text-xl lg:text-2xl font-bold text-white"></p>
-            <p id="res-change" class="text-sm mt-1"></p>
-        </div>
-        <div class="bg-surface rounded-card p-4 lg:p-5 col-span-2 lg:col-span-1">
-            <p class="text-xs text-muted mb-1">분석 시점</p>
-            <p id="res-time" class="text-lg font-bold text-white"></p>
-            <p class="text-xs text-muted mt-1">이 데이터는 분석 시점 기준입니다</p>
-        </div>
-    </div>
-
-    <!-- AI 리포트 + 뉴스/시그널 -->
-    <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
-        <!-- AI 리포트 (3칸) -->
-        <div class="lg:col-span-3 bg-surface rounded-card p-4 lg:p-5">
-            <div class="flex items-center gap-2 mb-3">
-                <div class="w-6 h-6 bg-toss/20 rounded-lg flex items-center justify-center">
-                    <svg class="w-3.5 h-3.5 text-toss" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-                    </svg>
-                </div>
-                <h2 class="text-sm font-semibold text-white">AI 종합 분석</h2>
-            </div>
-            <p id="res-report" class="text-sm text-muted leading-relaxed" style="white-space: pre-line;"></p>
-        </div>
-
-        <!-- 뉴스 + 시그널 (2칸) -->
-        <div class="lg:col-span-2 space-y-4">
-            <!-- 최근 뉴스 -->
-            <div class="bg-surface rounded-card p-4 lg:p-5">
-                <h2 class="text-sm font-semibold text-white mb-3">최근 뉴스</h2>
-                <div id="res-news" class="space-y-2.5"></div>
-                <p id="res-news-empty" class="hidden text-xs text-muted text-center py-3">관련 뉴스 없음</p>
-            </div>
-
-            <!-- 최근 시그널 -->
-            <div class="bg-surface rounded-card p-4 lg:p-5">
-                <h2 class="text-sm font-semibold text-white mb-3">최근 시그널</h2>
-                <div id="res-signals" class="space-y-2.5"></div>
-                <p id="res-signals-empty" class="hidden text-xs text-muted text-center py-3">관련 시그널 없음</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- 리서치 이력 -->
-<div class="bg-surface rounded-card p-4 lg:p-5">
-    <h2 class="text-sm font-semibold text-white mb-4">리서치 이력</h2>
-    <div id="history-list" class="space-y-2">
+<!-- 리서치 종목 리스트 -->
+<div id="ticker-list" class="bg-surface rounded-card p-4 lg:p-5">
+    <h2 class="text-sm font-semibold text-white mb-4">리서치 종목</h2>
+    <div class="space-y-1">
         {% if research_tickers %}
         {% for rt in research_tickers %}
-        <div class="flex items-center justify-between p-3 rounded-xl hover:bg-elevated cursor-pointer transition-colors"
-             onclick="loadTickerHistory('{{ rt.ticker }}', '{{ rt.ticker_name }}', '{{ rt.market }}')">
-            <div>
+        <a href="/research/ticker/{{ rt.ticker }}"
+           class="flex items-center justify-between p-3 rounded-xl hover:bg-elevated transition-colors">
+            <div class="flex items-center gap-3">
                 <span class="text-sm font-medium text-white">{{ rt.ticker_name or rt.ticker }}</span>
-                {% if rt.ticker_name %}<span class="text-xs text-muted ml-1">{{ rt.ticker }}</span>{% endif %}
-                <span class="text-xs px-2 py-0.5 rounded-lg bg-elevated text-muted ml-1">{% if rt.market == 'kr_stock' %}한국주식{% elif rt.market == 'us_stock' %}미국주식{% elif rt.market == 'crypto' %}코인{% else %}{{ rt.market }}{% endif %}</span>
+                {% if rt.ticker_name %}<span class="text-xs text-muted">{{ rt.ticker }}</span>{% endif %}
+                <span class="text-xs px-2 py-0.5 rounded-lg bg-elevated text-muted">
+                    {% if rt.market == 'kr_stock' %}한국주식{% elif rt.market == 'us_stock' %}미국주식{% elif rt.market == 'crypto' %}코인{% else %}{{ rt.market }}{% endif %}
+                </span>
             </div>
             <div class="flex items-center gap-3">
+                <span class="text-xs text-muted">{{ research_counts.get(rt.id, 0) }}회 분석</span>
                 <span class="text-xs text-muted">{{ rt.last_researched_at.strftime('%m/%d %H:%M') }}</span>
-                <button onclick="event.stopPropagation(); reResearch('{{ rt.ticker }}', '{{ rt.ticker_name }}', '{{ rt.market }}')"
-                    class="text-xs px-2.5 py-1 rounded-lg bg-toss/10 text-toss hover:bg-toss/20 transition-colors">
-                    다시 분석
-                </button>
+                <svg class="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
             </div>
-        </div>
+        </a>
         {% endfor %}
         {% else %}
-        <p class="text-xs text-muted text-center py-6">아직 리서치한 종목이 없습니다.</p>
+        <p class="text-xs text-muted text-center py-8">아직 리서치한 종목이 없습니다. 위 검색바에서 종목을 검색해보세요.</p>
         {% endif %}
     </div>
 </div>
@@ -112,45 +58,39 @@
 var selectedTicker = null;
 var debounceTimer = null;
 
-// 자동완성
 document.getElementById('research-input').addEventListener('input', function(e) {
     var q = e.target.value.trim();
     selectedTicker = null;
     document.getElementById('research-btn').disabled = true;
-
     if (debounceTimer) clearTimeout(debounceTimer);
-    if (q.length < 1) {
-        document.getElementById('search-results').classList.add('hidden');
-        return;
-    }
+    if (q.length < 1) { document.getElementById('search-results').classList.add('hidden'); return; }
+
+    // 검색 중 표시
+    var c = document.getElementById('search-results');
+    c.innerHTML = '<div class="p-3 text-xs text-muted flex items-center gap-2"><div class="w-3 h-3 border border-toss/30 border-t-toss rounded-full animate-spin"></div>검색 중...</div>';
+    c.classList.remove('hidden');
 
     debounceTimer = setTimeout(function() {
         fetch('/api/ticker/search?q=' + encodeURIComponent(q))
             .then(function(r) { return r.json(); })
             .then(function(results) {
-                var container = document.getElementById('search-results');
                 if (results.length === 0) {
-                    container.innerHTML = '<div class="p-3 text-xs text-muted">검색 결과 없음</div>';
-                    container.classList.remove('hidden');
+                    c.innerHTML = '<div class="p-3 text-xs text-muted">검색 결과 없음</div>';
                     return;
                 }
-                container.innerHTML = results.map(function(item) {
-                    return '<div class="px-4 py-3 hover:bg-elevated active:bg-elevated cursor-pointer flex items-center justify-between" ' +
-                        'onclick="selectTicker(\'' + item.ticker.replace(/'/g, "\\'") + '\', \'' + (item.name || '').replace(/'/g, "\\'") + '\', \'' + item.market + '\')">' +
+                c.innerHTML = results.map(function(item) {
+                    return '<div class="px-4 py-3 hover:bg-elevated cursor-pointer flex items-center justify-between" ' +
+                        'onclick="selectTicker(\'' + item.ticker.replace(/'/g, "\\'") + '\', \'' + (item.name||'').replace(/'/g, "\\'") + '\', \'' + item.market + '\')">' +
                         '<span class="text-sm text-white">' + (item.name || item.ticker) + '</span>' +
-                        '<span class="text-xs text-muted">' + item.ticker + '</span>' +
-                        '</div>';
+                        '<span class="text-xs text-muted">' + item.ticker + '</span></div>';
                 }).join('');
-                container.classList.remove('hidden');
             });
     }, 300);
 });
 
-// 클릭 외부 시 드롭다운 닫기
 document.addEventListener('click', function(e) {
-    if (!e.target.closest('#research-input') && !e.target.closest('#search-results')) {
+    if (!e.target.closest('#research-input') && !e.target.closest('#search-results'))
         document.getElementById('search-results').classList.add('hidden');
-    }
 });
 
 function selectTicker(ticker, name, market) {
@@ -162,112 +102,26 @@ function selectTicker(ticker, name, market) {
 
 function runResearch() {
     if (!selectedTicker) return;
-
-    document.getElementById('research-result').classList.add('hidden');
+    document.getElementById('ticker-list').classList.add('hidden');
     document.getElementById('loading').classList.remove('hidden');
     document.getElementById('research-btn').disabled = true;
 
     fetch('/api/research', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            ticker: selectedTicker.ticker,
-            ticker_name: selectedTicker.name,
-            market: selectedTicker.market,
-        }),
+        body: JSON.stringify(selectedTicker),
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        renderResult(data);
-        document.getElementById('loading').classList.add('hidden');
-        document.getElementById('research-btn').disabled = false;
+        // 분석 완료 → 종목 상세 페이지로 이동
+        window.location.href = '/research/ticker/' + encodeURIComponent(data.ticker);
     })
-    .catch(function(err) {
+    .catch(function() {
         document.getElementById('loading').classList.add('hidden');
+        document.getElementById('ticker-list').classList.remove('hidden');
         document.getElementById('research-btn').disabled = false;
         alert('분석 중 에러가 발생했습니다.');
     });
-}
-
-function reResearch(ticker, name, market) {
-    selectedTicker = { ticker: ticker, name: name, market: market };
-    document.getElementById('research-input').value = (name || ticker) + ' (' + ticker + ')';
-    runResearch();
-}
-
-function renderResult(data) {
-    // 종목 정보
-    document.getElementById('res-name').textContent = data.ticker_name || data.ticker;
-    document.getElementById('res-ticker').textContent = data.ticker + ' · ' + (data.market === 'kr_stock' ? '한국주식' : data.market === 'us_stock' ? '미국주식' : '코인');
-
-    // 가격
-    var price = data.price || {};
-    var priceVal = price.price || 0;
-    var changePct = price.change_pct || 0;
-    var isCrypto = data.market === 'crypto';
-    var isUS = data.market === 'us_stock';
-    var fmt = (isCrypto || isUS) ? '$' + priceVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : priceVal.toLocaleString() + '원';
-    document.getElementById('res-price').textContent = fmt;
-
-    var changeEl = document.getElementById('res-change');
-    var sign = changePct > 0 ? '+' : '';
-    changeEl.textContent = sign + changePct.toFixed(1) + '%';
-    changeEl.className = 'text-sm mt-1 ' + (changePct >= 0 ? 'text-[#F04452]' : 'text-toss');
-
-    // 시간
-    if (data.created_at) {
-        var d = new Date(data.created_at);
-        document.getElementById('res-time').textContent = d.toLocaleString('ko-KR', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'});
-    }
-
-    // AI 리포트
-    document.getElementById('res-report').textContent = data.ai_report || '분석 데이터 부족';
-
-    // 뉴스
-    var newsContainer = document.getElementById('res-news');
-    var newsEmpty = document.getElementById('res-news-empty');
-    var newsList = data.news || [];
-    if (newsList.length > 0) {
-        newsContainer.innerHTML = newsList.map(function(n) {
-            return '<a href="' + (n.url || '#') + '" target="_blank" class="block text-xs text-muted hover:text-white transition-colors leading-relaxed">' +
-                n.title + '</a>';
-        }).join('');
-        newsEmpty.classList.add('hidden');
-    } else {
-        newsContainer.innerHTML = '';
-        newsEmpty.classList.remove('hidden');
-    }
-
-    // 시그널
-    var sigContainer = document.getElementById('res-signals');
-    var sigEmpty = document.getElementById('res-signals-empty');
-    var sigList = data.signals || [];
-    if (sigList.length > 0) {
-        sigContainer.innerHTML = sigList.map(function(s) {
-            var emoji = s.direction === 'bullish' ? '<span class="text-[#F04452]">▲</span>' : '<span class="text-toss">▼</span>';
-            return '<div class="text-xs text-muted leading-relaxed">' +
-                emoji + ' ' + s.signal_type + ' — ' + s.description + '</div>';
-        }).join('');
-        sigEmpty.classList.add('hidden');
-    } else {
-        sigContainer.innerHTML = '';
-        sigEmpty.classList.remove('hidden');
-    }
-
-    document.getElementById('research-result').classList.remove('hidden');
-}
-
-function loadTickerHistory(ticker, name, market) {
-    // 해당 종목의 마지막 리서치 결과 로드
-    fetch('/api/research/history?ticker=' + encodeURIComponent(ticker) + '&limit=1')
-        .then(function(r) { return r.json(); })
-        .then(function(list) {
-            if (list.length > 0) {
-                fetch('/api/research/' + list[0].id)
-                    .then(function(r) { return r.json(); })
-                    .then(function(data) { renderResult(data); });
-            }
-        });
 }
 </script>
 {% endblock %}

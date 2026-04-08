@@ -265,33 +265,37 @@ def detect_price_anomalies() -> list[dict]:
 def _fetch_news(anomaly: dict, max_items: int = 5) -> list[str]:
     """시그널 관련 최신 뉴스 가져오기."""
     market = anomaly.get("market", "")
-    query = anomaly.get("ticker_name") or anomaly["ticker"]
+    ticker = anomaly["ticker"]
 
     try:
-        if market == "kr_stock" and NAVER_CLIENT_ID:
-            # 네이버 뉴스 검색 API
+        if market == "kr_stock":
+            # 네이버 금융 모바일 API — 종목 태깅 뉴스
             resp = httpx.get(
-                "https://openapi.naver.com/v1/search/news.json",
-                params={"query": query, "display": max_items, "sort": "date"},
-                headers={
-                    "X-Naver-Client-Id": NAVER_CLIENT_ID,
-                    "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-                },
+                f"https://m.stock.naver.com/api/news/stock/{ticker}",
+                headers={"User-Agent": "Mozilla/5.0"},
                 timeout=10,
             )
             resp.raise_for_status()
-            items = resp.json().get("items", [])
-            import re
-            return [re.sub(r"<.*?>|&[a-z]+;", "", item["title"]) for item in items]
+            titles = []
+            for group in resp.json():
+                for item in group.get("items", []):
+                    title = item.get("title", "").strip()
+                    if title:
+                        title = title.replace("&quot;", '"').replace("&amp;", "&")
+                        titles.append(title)
+                    if len(titles) >= max_items:
+                        break
+                if len(titles) >= max_items:
+                    break
+            return titles
 
         elif market == "us_stock" and FINNHUB_API_KEY:
-            # Finnhub company news API
             today = datetime.now(KST).strftime("%Y-%m-%d")
             week_ago = (datetime.now(KST) - timedelta(days=3)).strftime("%Y-%m-%d")
             resp = httpx.get(
                 "https://finnhub.io/api/v1/company-news",
                 params={
-                    "symbol": anomaly["ticker"],
+                    "symbol": ticker,
                     "from": week_ago, "to": today,
                     "token": FINNHUB_API_KEY,
                 },
@@ -302,7 +306,7 @@ def _fetch_news(anomaly: dict, max_items: int = 5) -> list[str]:
             return [item.get("headline", "") for item in items if item.get("headline")]
 
     except Exception as e:
-        logger.error(f"뉴스 fetch 실패 [{query}]: {e}")
+        logger.error(f"뉴스 fetch 실패 [{ticker}]: {e}")
 
     return []
 

@@ -22,5 +22,5 @@ def get_db():
 
 def init_db():
     """테이블 생성. 앱 시작시 1회 호출."""
-    from db.models import Price, News, SignalData, Signal, Trade, PortfolioSetting, ResearchTicker, ResearchHistory
+    from db.models import Price, News, Watchlist, SignalData, Signal, Trade, PortfolioSetting, ResearchTicker, ResearchHistory
     Base.metadata.create_all(bind=engine)
