@@ -266,8 +266,9 @@ def get_ai_analysis(anomaly: dict) -> str:
 
     prompt = (
         "주식/코인 초보 투자자에게 아래 시그널을 쉽게 설명해주세요.\n"
-        "전문 용어 없이, 친구한테 말하듯이 한국어 2~3문장으로.\n"
-        "'그래서 어떻게 해야 하는지' 행동 가이드를 꼭 포함해주세요.\n\n"
+        "전문 용어 없이, 친구한테 말하듯이.\n"
+        "형식: 첫 줄에 상황 요약 1문장, 빈 줄, 행동 가이드 1~2문장.\n"
+        "마크다운(**, ## 등) 쓰지 마세요. 번호 매기지 마세요.\n\n"
         f"종목: {anomaly.get('ticker_name') or anomaly['ticker']}\n"
         f"무슨 일: {signal_type} — {direction_kr}\n"
         f"상세: {anomaly['description']}\n"
