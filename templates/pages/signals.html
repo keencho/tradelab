@@ -136,6 +136,7 @@
             <!-- 우측 정보 -->
             <div class="text-right shrink-0 hidden sm:block">
                 <div class="text-xs text-muted mb-2">{{ s.created_at.strftime('%m/%d %H:%M') }}</div>
+                {% if s.signal_type not in ('price_vs_close', 'price_momentum') %}
                 {% if s.z_score %}
                 <div class="text-xs text-muted mb-1">{{ s.z_score|z_label }}</div>
                 {% endif %}
@@ -155,9 +156,11 @@
                         style="width: {{ (s.confidence * 100)|int }}%">
                     </div>
                 </div>
+                {% endif %}
             </div>
 
             <!-- 모바일 확신도 -->
+            {% if s.signal_type not in ('price_vs_close', 'price_momentum') %}
             <div class="shrink-0 sm:hidden">
                 <span class="text-sm font-bold
                     {% if s.confidence >= 0.8 %}text-[#F04452]
@@ -166,6 +169,7 @@
                     {{ (s.confidence * 100)|int }}%
                 </span>
             </div>
+            {% endif %}
         </div>
     </div>
     {% endfor %}

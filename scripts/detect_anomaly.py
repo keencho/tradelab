@@ -90,10 +90,8 @@ def run():
             if _is_duplicate(session, anomaly, now):
                 continue
 
-            # LLM AI 해석 (높은 신뢰도만)
-            ai_text = ""
-            if anomaly["confidence"] >= 0.7:
-                ai_text = get_ai_analysis(anomaly)
+            # LLM AI 해석
+            ai_text = get_ai_analysis(anomaly)
 
             signal = Signal(
                 ticker=anomaly["ticker"],
