@@ -37,6 +37,8 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # --- 뉴스 수집 ---
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
+NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID", "")
+NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET", "")
 
 # --- 시그널/매크로 ---
 ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY", "")

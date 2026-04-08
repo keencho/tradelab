@@ -3,9 +3,12 @@
 import statistics
 from datetime import datetime, timedelta
 
+import httpx
+
 from config import (
     KST, PRICE_ALERT_VS_CLOSE, PRICE_ALERT_MOMENTUM,
-    SIGNAL_TYPE_NAMES, get_logger,
+    SIGNAL_TYPE_NAMES, FINNHUB_API_KEY, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET,
+    get_logger,
 )
 from db.database import SessionLocal
 from db.models import SignalData, Watchlist
@@ -259,19 +262,73 @@ def detect_price_anomalies() -> list[dict]:
     return anomalies
 
 
+def _fetch_news(anomaly: dict, max_items: int = 5) -> list[str]:
+    """시그널 관련 최신 뉴스 가져오기."""
+    market = anomaly.get("market", "")
+    query = anomaly.get("ticker_name") or anomaly["ticker"]
+
+    try:
+        if market == "kr_stock" and NAVER_CLIENT_ID:
+            # 네이버 뉴스 검색 API
+            resp = httpx.get(
+                "https://openapi.naver.com/v1/search/news.json",
+                params={"query": query, "display": max_items, "sort": "date"},
+                headers={
+                    "X-Naver-Client-Id": NAVER_CLIENT_ID,
+                    "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
+                },
+                timeout=10,
+            )
+            resp.raise_for_status()
+            items = resp.json().get("items", [])
+            import re
+            return [re.sub(r"<.*?>|&[a-z]+;", "", item["title"]) for item in items]
+
+        elif market == "us_stock" and FINNHUB_API_KEY:
+            # Finnhub company news API
+            today = datetime.now(KST).strftime("%Y-%m-%d")
+            week_ago = (datetime.now(KST) - timedelta(days=3)).strftime("%Y-%m-%d")
+            resp = httpx.get(
+                "https://finnhub.io/api/v1/company-news",
+                params={
+                    "symbol": anomaly["ticker"],
+                    "from": week_ago, "to": today,
+                    "token": FINNHUB_API_KEY,
+                },
+                timeout=10,
+            )
+            resp.raise_for_status()
+            items = resp.json()[:max_items]
+            return [item.get("headline", "") for item in items if item.get("headline")]
+
+    except Exception as e:
+        logger.error(f"뉴스 fetch 실패 [{query}]: {e}")
+
+    return []
+
+
 def get_ai_analysis(anomaly: dict) -> str:
-    """LLM으로 이상치 AI 해석 요청 (초보 투자자용)."""
+    """LLM으로 이상치 AI 해석 요청 (초보 투자자용 + 뉴스 연동)."""
     signal_type = SIGNAL_TYPE_NAMES.get(anomaly["signal_type"], anomaly["signal_type"])
     direction_kr = "상승 신호" if anomaly["direction"] == "bullish" else "하락 신호"
+
+    # 관련 뉴스 가져오기
+    news = _fetch_news(anomaly)
+    news_text = ""
+    if news:
+        news_lines = "\n".join(f"- {n}" for n in news)
+        news_text = f"\n\n최근 관련 뉴스:\n{news_lines}\n"
 
     prompt = (
         "주식/코인 초보 투자자에게 아래 시그널을 쉽게 설명해주세요.\n"
         "전문 용어 없이 쉬운 말로.\n"
-        "형식: 첫 줄에 상황 요약 1문장, 빈 줄, 행동 가이드 1~2문장.\n"
+        "형식: 첫 줄에 왜 이런 움직임이 생겼는지 1문장, 빈 줄, 행동 가이드 1~2문장.\n"
+        "뉴스가 있으면 원인 분석에 활용하세요. 없으면 일반적인 분석을 해주세요.\n"
         "마크다운(**, ## 등) 쓰지 마세요. 번호 매기지 마세요. 존댓말로.\n\n"
         f"종목: {anomaly.get('ticker_name') or anomaly['ticker']}\n"
         f"무슨 일: {signal_type} — {direction_kr}\n"
         f"상세: {anomaly['description']}\n"
+        f"{news_text}"
     )
     result = call_llm(prompt)
     return result or ""
