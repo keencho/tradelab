@@ -146,9 +146,20 @@ async def portfolio(request: Request):
 
 @router.get("/research", response_class=HTMLResponse)
 async def research(request: Request):
+    # 리서치한 종목 리스트
+    from db.models import ResearchTicker, ResearchHistory
+    session = SessionLocal()
+    try:
+        tickers = session.query(ResearchTicker).order_by(
+            ResearchTicker.last_researched_at.desc()
+        ).limit(30).all()
+    finally:
+        session.close()
+
     return _page_response(request, "pages/research.html", {
         "request": request,
         "page": "research",
+        "research_tickers": tickers,
     })
 
 

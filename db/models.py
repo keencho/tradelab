@@ -82,6 +82,35 @@ class Signal(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
 
 
+class ResearchTicker(Base):
+    """리서치 종목 (main)"""
+    __tablename__ = "research_tickers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ticker: Mapped[str] = mapped_column(String(30), index=True)
+    ticker_name: Mapped[str] = mapped_column(String(100), default="")
+    market: Mapped[str] = mapped_column(String(10), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
+    last_researched_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
+
+
+class ResearchHistory(Base):
+    """리서치 이력 (sub)"""
+    __tablename__ = "research_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    research_ticker_id: Mapped[int] = mapped_column(Integer, index=True)
+    ticker: Mapped[str] = mapped_column(String(30), index=True)
+    market: Mapped[str] = mapped_column(String(10), default="")
+    price: Mapped[float] = mapped_column(Float, default=0.0)
+    prev_close: Mapped[float] = mapped_column(Float, default=0.0)
+    change_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    news_data: Mapped[dict] = mapped_column(JSONB, default=list)
+    signals_data: Mapped[dict] = mapped_column(JSONB, default=list)
+    ai_report: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
+
+
 class Trade(Base):
     """가상매매 거래 내역"""
     __tablename__ = "trades"

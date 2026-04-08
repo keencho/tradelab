@@ -3,165 +3,271 @@
 
 {% block content %}
 <!-- 검색 바 -->
-<div class="bg-surface rounded-card p-4 lg:p-5 mb-8">
+<div class="bg-surface rounded-card p-4 lg:p-5 mb-6">
     <div class="flex gap-3">
-        <input type="text" id="research-input" placeholder="종목 코드 입력 (AAPL, BTC-USD, 005930.KS ...)"
-            class="flex-1 bg-elevated border-0 rounded-xl px-4 py-3 text-sm text-white placeholder-muted focus:ring-2 focus:ring-toss focus:outline-none">
-        <button class="px-4 lg:px-6 py-3 bg-toss hover:bg-toss/90 active:bg-toss/80 text-white text-sm font-semibold rounded-xl transition-colors whitespace-nowrap">
+        <div class="relative flex-1">
+            <input type="text" id="research-input" placeholder="종목명 또는 코드 검색 (삼성전자, AAPL, BTC ...)"
+                autocomplete="off"
+                class="w-full bg-elevated border-0 rounded-xl px-4 py-3 text-sm text-white placeholder-muted focus:ring-2 focus:ring-toss focus:outline-none">
+            <!-- 자동완성 드롭다운 -->
+            <div id="search-results" class="hidden absolute left-0 right-0 top-full mt-1 bg-surface rounded-xl shadow-lg z-50 max-h-60 scroll-area border border-elevated"></div>
+        </div>
+        <button id="research-btn" onclick="runResearch()" disabled
+            class="px-4 lg:px-6 py-3 bg-toss hover:bg-toss/90 active:bg-toss/80 text-white text-sm font-semibold rounded-xl transition-colors whitespace-nowrap disabled:opacity-30 disabled:cursor-not-allowed">
             분석하기
         </button>
     </div>
 </div>
 
-<!-- Mock: NVDA 분석 결과 -->
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-8">
-    <div class="bg-surface rounded-card p-4 lg:p-5">
-        <p class="text-xs text-muted mb-1">현재가</p>
-        <p class="text-xl lg:text-2xl font-bold text-white">$920.50</p>
-        <p class="text-sm mt-1 text-[#F04452]">+$12.30 (+1.35%)</p>
-    </div>
-    <div class="bg-surface rounded-card p-4 lg:p-5">
-        <p class="text-xs text-muted mb-1">시가총액</p>
-        <p class="text-xl lg:text-2xl font-bold text-white">$2.27T</p>
-        <p class="text-sm mt-1 text-muted">Mega Cap</p>
-    </div>
-    <div class="bg-surface rounded-card p-4 lg:p-5">
-        <p class="text-xs text-muted mb-1">PER</p>
-        <p class="text-xl lg:text-2xl font-bold text-white">65.2</p>
-        <p class="text-sm mt-1 text-[#FF9F00]">업종 평균 28.5</p>
-    </div>
-    <div class="bg-surface rounded-card p-4 lg:p-5">
-        <p class="text-xs text-muted mb-1">52주 범위</p>
-        <p class="text-xl lg:text-2xl font-bold text-white">$470 — $974</p>
-        <p class="text-sm mt-1 text-muted">현재 상위 6%</p>
-    </div>
+<!-- 로딩 -->
+<div id="loading" class="hidden text-center py-20">
+    <div class="inline-block w-8 h-8 border-2 border-toss/30 border-t-toss rounded-full animate-spin mb-3"></div>
+    <p class="text-sm text-muted">분석 중...</p>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-8">
-    <!-- 차트 (모바일 1칸, 데스크탑 3칸) -->
-    <div class="lg:col-span-3 bg-surface rounded-card p-4 lg:p-5">
-        <div class="flex items-center justify-between mb-4">
-            <h2 class="text-sm font-semibold text-white">NVDA 캔들 차트</h2>
-            <div class="flex gap-1">
-                {% for period in ['1M', '3M', '6M', '1Y'] %}
-                <button class="px-2.5 lg:px-3 py-1 text-xs rounded-lg {% if period == '6M' %}bg-toss/10 text-toss{% else %}text-muted hover:text-white active:bg-elevated{% endif %}">{{ period }}</button>
-                {% endfor %}
-            </div>
+<!-- 분석 결과 (동적) -->
+<div id="research-result" class="hidden">
+    <!-- 가격 카드 -->
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4 mb-6">
+        <div class="bg-surface rounded-card p-4 lg:p-5">
+            <p class="text-xs text-muted mb-1">종목</p>
+            <p id="res-name" class="text-lg lg:text-xl font-bold text-white"></p>
+            <p id="res-ticker" class="text-xs text-muted mt-1"></p>
         </div>
-        <div id="candle-chart" style="height: 300px;"></div>
+        <div class="bg-surface rounded-card p-4 lg:p-5">
+            <p class="text-xs text-muted mb-1">현재가</p>
+            <p id="res-price" class="text-xl lg:text-2xl font-bold text-white"></p>
+            <p id="res-change" class="text-sm mt-1"></p>
+        </div>
+        <div class="bg-surface rounded-card p-4 lg:p-5 col-span-2 lg:col-span-1">
+            <p class="text-xs text-muted mb-1">분석 시점</p>
+            <p id="res-time" class="text-lg font-bold text-white"></p>
+            <p class="text-xs text-muted mt-1">이 데이터는 분석 시점 기준입니다</p>
+        </div>
     </div>
 
-    <!-- 정보 패널 (모바일 1칸, 데스크탑 2칸) -->
-    <div class="lg:col-span-2 space-y-4">
-        <!-- 기업 정보 -->
-        <div class="bg-surface rounded-card p-4 lg:p-5">
-            <h2 class="text-sm font-semibold text-white mb-3">기업 정보</h2>
-            <div class="space-y-2.5 text-sm">
-                <div class="flex justify-between">
-                    <span class="text-muted">섹터</span>
-                    <span class="text-white">Technology</span>
+    <!-- AI 리포트 + 뉴스/시그널 -->
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
+        <!-- AI 리포트 (3칸) -->
+        <div class="lg:col-span-3 bg-surface rounded-card p-4 lg:p-5">
+            <div class="flex items-center gap-2 mb-3">
+                <div class="w-6 h-6 bg-toss/20 rounded-lg flex items-center justify-center">
+                    <svg class="w-3.5 h-3.5 text-toss" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
                 </div>
-                <div class="flex justify-between">
-                    <span class="text-muted">산업</span>
-                    <span class="text-white">Semiconductors</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-muted">매출 (YoY)</span>
-                    <span class="text-[#F04452]">+120%</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-muted">영업이익률</span>
-                    <span class="text-white">62.1%</span>
-                </div>
+                <h2 class="text-sm font-semibold text-white">AI 종합 분석</h2>
             </div>
+            <p id="res-report" class="text-sm text-muted leading-relaxed" style="white-space: pre-line;"></p>
         </div>
 
-        <!-- 센티멘트 -->
-        <div class="bg-surface rounded-card p-4 lg:p-5">
-            <h2 class="text-sm font-semibold text-white mb-3">센티멘트</h2>
-            <div class="flex items-center gap-3 mb-3">
-                <div class="flex-1 h-2 bg-elevated rounded-full overflow-hidden">
-                    <div class="h-full bg-[#F04452] rounded-full" style="width: 78%"></div>
-                </div>
-                <span class="text-sm font-medium text-[#F04452]">78%</span>
+        <!-- 뉴스 + 시그널 (2칸) -->
+        <div class="lg:col-span-2 space-y-4">
+            <!-- 최근 뉴스 -->
+            <div class="bg-surface rounded-card p-4 lg:p-5">
+                <h2 class="text-sm font-semibold text-white mb-3">최근 뉴스</h2>
+                <div id="res-news" class="space-y-2.5"></div>
+                <p id="res-news-empty" class="hidden text-xs text-muted text-center py-3">관련 뉴스 없음</p>
             </div>
-            <p class="text-xs text-muted">최근 7일 뉴스/소셜 기반. 긍정 우세.</p>
-        </div>
 
-        <!-- 기술적 분석 -->
-        <div class="bg-surface rounded-card p-4 lg:p-5">
-            <h2 class="text-sm font-semibold text-white mb-3">기술적 지표</h2>
-            <div class="space-y-2.5 text-sm">
-                <div class="flex justify-between">
-                    <span class="text-muted">RSI (14)</span>
-                    <span class="text-[#FF9F00]">72.3 (과매수 근접)</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-muted">MACD</span>
-                    <span class="text-[#F04452]">강세 크로스</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-muted">MA 50/200</span>
-                    <span class="text-[#F04452]">골든크로스</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-muted">볼린저밴드</span>
-                    <span class="text-[#FF9F00]">상단 접근</span>
-                </div>
+            <!-- 최근 시그널 -->
+            <div class="bg-surface rounded-card p-4 lg:p-5">
+                <h2 class="text-sm font-semibold text-white mb-3">최근 시그널</h2>
+                <div id="res-signals" class="space-y-2.5"></div>
+                <p id="res-signals-empty" class="hidden text-xs text-muted text-center py-3">관련 시그널 없음</p>
             </div>
         </div>
     </div>
 </div>
 
-<!-- AI 종합 분석 -->
+<!-- 리서치 이력 -->
 <div class="bg-surface rounded-card p-4 lg:p-5">
-    <div class="flex items-center gap-2 mb-3">
-        <div class="w-6 h-6 bg-toss/20 rounded-lg flex items-center justify-center">
-            <svg class="w-3.5 h-3.5 text-toss" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-            </svg>
+    <h2 class="text-sm font-semibold text-white mb-4">리서치 이력</h2>
+    <div id="history-list" class="space-y-2">
+        {% if research_tickers %}
+        {% for rt in research_tickers %}
+        <div class="flex items-center justify-between p-3 rounded-xl hover:bg-elevated cursor-pointer transition-colors"
+             onclick="loadTickerHistory('{{ rt.ticker }}', '{{ rt.ticker_name }}', '{{ rt.market }}')">
+            <div>
+                <span class="text-sm font-medium text-white">{{ rt.ticker_name or rt.ticker }}</span>
+                {% if rt.ticker_name %}<span class="text-xs text-muted ml-1">{{ rt.ticker }}</span>{% endif %}
+                <span class="text-xs px-2 py-0.5 rounded-lg bg-elevated text-muted ml-1">{% if rt.market == 'kr_stock' %}한국주식{% elif rt.market == 'us_stock' %}미국주식{% elif rt.market == 'crypto' %}코인{% else %}{{ rt.market }}{% endif %}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-xs text-muted">{{ rt.last_researched_at.strftime('%m/%d %H:%M') }}</span>
+                <button onclick="event.stopPropagation(); reResearch('{{ rt.ticker }}', '{{ rt.ticker_name }}', '{{ rt.market }}')"
+                    class="text-xs px-2.5 py-1 rounded-lg bg-toss/10 text-toss hover:bg-toss/20 transition-colors">
+                    다시 분석
+                </button>
+            </div>
         </div>
-        <h2 class="text-sm font-semibold text-white">AI 종합 분석</h2>
-        <span class="text-xs text-muted">Gemini Flash</span>
-    </div>
-    <div class="text-sm text-muted leading-relaxed space-y-2">
-        <p><strong class="text-white">종합 판단: 단기 과열 주의, 중장기 강세 유지</strong></p>
-        <p>NVDA는 AI 인프라 수요 폭발로 펀더멘탈이 역대 최강 수준입니다. 매출 YoY +120%, 영업이익률 62%는 반도체 업종에서 이례적인 수치입니다.</p>
-        <p>다만 RSI 72, 볼린저밴드 상단 접근, PER 65배는 단기적으로 과열 시그널입니다. CFO의 $5.2M 매도(Form 4)도 주의 요인입니다.</p>
-        <p class="text-toss">전략 제안: 현재가 매수보다는 $880~$900 구간 조정 시 분할 매수 권장. 기존 보유분은 홀딩.</p>
+        {% endfor %}
+        {% else %}
+        <p class="text-xs text-muted text-center py-6">아직 리서치한 종목이 없습니다.</p>
+        {% endif %}
     </div>
 </div>
 
-<!-- Mock 캔들 차트 -->
 <script>
-    var dates = [];
-    var open = [], high = [], low = [], close = [];
-    var price = 850;
-    for (var i = 30; i >= 0; i--) {
-        var d = new Date();
-        d.setDate(d.getDate() - i);
-        dates.push(d.toISOString().split('T')[0]);
-        var o = price + (Math.random() - 0.48) * 20;
-        var c = o + (Math.random() - 0.45) * 25;
-        var h = Math.max(o, c) + Math.random() * 10;
-        var l = Math.min(o, c) - Math.random() * 10;
-        open.push(o); high.push(h); low.push(l); close.push(c);
-        price = c;
+var selectedTicker = null;
+var debounceTimer = null;
+
+// 자동완성
+document.getElementById('research-input').addEventListener('input', function(e) {
+    var q = e.target.value.trim();
+    selectedTicker = null;
+    document.getElementById('research-btn').disabled = true;
+
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (q.length < 1) {
+        document.getElementById('search-results').classList.add('hidden');
+        return;
     }
 
-    Plotly.newPlot('candle-chart', [{
-        x: dates, open: open, high: high, low: low, close: close,
-        type: 'candlestick',
-        increasing: { line: { color: '#F04452' }, fillcolor: '#F04452' },
-        decreasing: { line: { color: '#3182F6' }, fillcolor: '#3182F6' },
-    }], {
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        font: { family: 'Pretendard', color: '#8B95A1', size: 11 },
-        margin: { l: 50, r: 20, t: 10, b: 30 },
-        xaxis: { gridcolor: '#2C2D33', rangeslider: { visible: false } },
-        yaxis: { gridcolor: '#2C2D33', tickprefix: '$' },
-        showlegend: false,
-    }, { responsive: true, displayModeBar: false });
+    debounceTimer = setTimeout(function() {
+        fetch('/api/ticker/search?q=' + encodeURIComponent(q))
+            .then(function(r) { return r.json(); })
+            .then(function(results) {
+                var container = document.getElementById('search-results');
+                if (results.length === 0) {
+                    container.innerHTML = '<div class="p-3 text-xs text-muted">검색 결과 없음</div>';
+                    container.classList.remove('hidden');
+                    return;
+                }
+                container.innerHTML = results.map(function(item) {
+                    return '<div class="px-4 py-3 hover:bg-elevated active:bg-elevated cursor-pointer flex items-center justify-between" ' +
+                        'onclick="selectTicker(\'' + item.ticker.replace(/'/g, "\\'") + '\', \'' + (item.name || '').replace(/'/g, "\\'") + '\', \'' + item.market + '\')">' +
+                        '<span class="text-sm text-white">' + (item.name || item.ticker) + '</span>' +
+                        '<span class="text-xs text-muted">' + item.ticker + '</span>' +
+                        '</div>';
+                }).join('');
+                container.classList.remove('hidden');
+            });
+    }, 300);
+});
+
+// 클릭 외부 시 드롭다운 닫기
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('#research-input') && !e.target.closest('#search-results')) {
+        document.getElementById('search-results').classList.add('hidden');
+    }
+});
+
+function selectTicker(ticker, name, market) {
+    selectedTicker = { ticker: ticker, name: name, market: market };
+    document.getElementById('research-input').value = (name || ticker) + ' (' + ticker + ')';
+    document.getElementById('search-results').classList.add('hidden');
+    document.getElementById('research-btn').disabled = false;
+}
+
+function runResearch() {
+    if (!selectedTicker) return;
+
+    document.getElementById('research-result').classList.add('hidden');
+    document.getElementById('loading').classList.remove('hidden');
+    document.getElementById('research-btn').disabled = true;
+
+    fetch('/api/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            ticker: selectedTicker.ticker,
+            ticker_name: selectedTicker.name,
+            market: selectedTicker.market,
+        }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        renderResult(data);
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('research-btn').disabled = false;
+    })
+    .catch(function(err) {
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('research-btn').disabled = false;
+        alert('분석 중 에러가 발생했습니다.');
+    });
+}
+
+function reResearch(ticker, name, market) {
+    selectedTicker = { ticker: ticker, name: name, market: market };
+    document.getElementById('research-input').value = (name || ticker) + ' (' + ticker + ')';
+    runResearch();
+}
+
+function renderResult(data) {
+    // 종목 정보
+    document.getElementById('res-name').textContent = data.ticker_name || data.ticker;
+    document.getElementById('res-ticker').textContent = data.ticker + ' · ' + (data.market === 'kr_stock' ? '한국주식' : data.market === 'us_stock' ? '미국주식' : '코인');
+
+    // 가격
+    var price = data.price || {};
+    var priceVal = price.price || 0;
+    var changePct = price.change_pct || 0;
+    var isCrypto = data.market === 'crypto';
+    var isUS = data.market === 'us_stock';
+    var fmt = (isCrypto || isUS) ? '$' + priceVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : priceVal.toLocaleString() + '원';
+    document.getElementById('res-price').textContent = fmt;
+
+    var changeEl = document.getElementById('res-change');
+    var sign = changePct > 0 ? '+' : '';
+    changeEl.textContent = sign + changePct.toFixed(1) + '%';
+    changeEl.className = 'text-sm mt-1 ' + (changePct >= 0 ? 'text-[#F04452]' : 'text-toss');
+
+    // 시간
+    if (data.created_at) {
+        var d = new Date(data.created_at);
+        document.getElementById('res-time').textContent = d.toLocaleString('ko-KR', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'});
+    }
+
+    // AI 리포트
+    document.getElementById('res-report').textContent = data.ai_report || '분석 데이터 부족';
+
+    // 뉴스
+    var newsContainer = document.getElementById('res-news');
+    var newsEmpty = document.getElementById('res-news-empty');
+    var newsList = data.news || [];
+    if (newsList.length > 0) {
+        newsContainer.innerHTML = newsList.map(function(n) {
+            return '<a href="' + (n.url || '#') + '" target="_blank" class="block text-xs text-muted hover:text-white transition-colors leading-relaxed">' +
+                n.title + '</a>';
+        }).join('');
+        newsEmpty.classList.add('hidden');
+    } else {
+        newsContainer.innerHTML = '';
+        newsEmpty.classList.remove('hidden');
+    }
+
+    // 시그널
+    var sigContainer = document.getElementById('res-signals');
+    var sigEmpty = document.getElementById('res-signals-empty');
+    var sigList = data.signals || [];
+    if (sigList.length > 0) {
+        sigContainer.innerHTML = sigList.map(function(s) {
+            var emoji = s.direction === 'bullish' ? '<span class="text-[#F04452]">▲</span>' : '<span class="text-toss">▼</span>';
+            return '<div class="text-xs text-muted leading-relaxed">' +
+                emoji + ' ' + s.signal_type + ' — ' + s.description + '</div>';
+        }).join('');
+        sigEmpty.classList.add('hidden');
+    } else {
+        sigContainer.innerHTML = '';
+        sigEmpty.classList.remove('hidden');
+    }
+
+    document.getElementById('research-result').classList.remove('hidden');
+}
+
+function loadTickerHistory(ticker, name, market) {
+    // 해당 종목의 마지막 리서치 결과 로드
+    fetch('/api/research/history?ticker=' + encodeURIComponent(ticker) + '&limit=1')
+        .then(function(r) { return r.json(); })
+        .then(function(list) {
+            if (list.length > 0) {
+                fetch('/api/research/' + list[0].id)
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) { renderResult(data); });
+            }
+        });
+}
 </script>
 {% endblock %}
