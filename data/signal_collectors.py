@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import httpx
 
 from config import (
-    KST, ETHERSCAN_API_KEY, FRED_API_KEY, DART_API_KEY, ECOS_API_KEY,
+    KST, FINNHUB_API_KEY, ETHERSCAN_API_KEY, FRED_API_KEY, DART_API_KEY, ECOS_API_KEY,
     get_logger,
 )
 
@@ -542,6 +542,55 @@ def collect_sec_insider(tickers: list[str] | None = None) -> list[dict]:
     return results
 
 
+# ── 3-8b. Finnhub — 미국주식 실시간 가격 ────────────────────
+
+def collect_us_price(tickers: list[str] | None = None) -> list[dict]:
+    """Finnhub API로 미국주식 현재가 수집.
+
+    GET https://finnhub.io/api/v1/quote?symbol=AAPL&token=KEY
+    → { "c": 현재가, "pc": 전일종가, "dp": 등락률%, "d": 변동폭 }
+    """
+    if not FINNHUB_API_KEY:
+        return []
+
+    if tickers is None:
+        tickers = get_us_watchlist()
+
+    results = []
+
+    for ticker in tickers:
+        try:
+            resp = httpx.get(
+                "https://finnhub.io/api/v1/quote",
+                params={"symbol": ticker, "token": FINNHUB_API_KEY},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            price = float(data.get("c", 0))
+            prev_close = float(data.get("pc", 0))
+            change_pct = float(data.get("dp", 0))
+
+            if price == 0 or prev_close == 0:
+                continue
+
+            results.append({
+                "source": "finnhub", "data_type": "realtime_price",
+                "ticker": ticker, "market": "us_stock",
+                "value": price,
+                "extra": {
+                    "prev_close": prev_close,
+                    "change_pct": change_pct,
+                },
+            })
+            time.sleep(0.3)
+        except Exception as e:
+            logger.error(f"Finnhub 가격 [{ticker}]: {e}")
+
+    return results
+
+
 # ── 3-9. Reddit — 소셜 버즈 ──────────────────────────────────
 
 SUBREDDITS = [
@@ -641,6 +690,7 @@ def collect_all_signals() -> list[dict]:
     # 미국주식
     all_data.extend(collect_cnn_fear_greed())
     all_data.extend(collect_sec_insider())
+    all_data.extend(collect_us_price())
 
     # 한국주식 (장중만)
     if is_kr_market_hours():
