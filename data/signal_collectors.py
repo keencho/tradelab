@@ -1,9 +1,12 @@
 """시그널 수집기 -- 코인/미국주식/한국주식/매크로."""
 
+import socket
 import time
 from datetime import datetime, timedelta
 
 import httpx
+
+socket.setdefaulttimeout(20)
 
 from config import (
     KST, FINNHUB_API_KEY, ETHERSCAN_API_KEY, FRED_API_KEY, DART_API_KEY, ECOS_API_KEY,
