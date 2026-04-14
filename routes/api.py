@@ -452,7 +452,7 @@ def _fetch_crypto_candles(ticker: str, interval: str, period: str) -> list[dict]
     else:
         limit = {"1m": 30, "3m": 90, "6m": 180, "1y": 365, "3y": 1000, "5y": 1000}.get(period, 90)
 
-    exchange = ccxt.binance({"options": {"defaultType": "future"}})
+    exchange = ccxt.binance({"timeout": 15000, "options": {"defaultType": "future"}})
     symbol = f"{ticker}/USDT:USDT"
     ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
 
@@ -517,7 +517,7 @@ def _fetch_price(ticker: str, market: str) -> dict:
 
         elif market == "crypto":
             import ccxt
-            exchange = ccxt.binance({"options": {"defaultType": "future"}})
+            exchange = ccxt.binance({"timeout": 15000, "options": {"defaultType": "future"}})
             symbol = f"{ticker}/USDT:USDT"
             t = exchange.fetch_ticker(symbol)
             return {

@@ -214,7 +214,7 @@ def collect_funding_rate(symbols: list[str] | None = None) -> list[dict]:
     if symbols is None:
         symbols = get_crypto_watchlist()
 
-    exchange = ccxt.binance({"options": {"defaultType": "future"}})
+    exchange = ccxt.binance({"timeout": 15000, "options": {"defaultType": "future"}})
     results = []
 
     for symbol in symbols:
@@ -240,7 +240,7 @@ def collect_open_interest(symbols: list[str] | None = None) -> list[dict]:
     if symbols is None:
         symbols = get_crypto_watchlist()
 
-    exchange = ccxt.binance({"options": {"defaultType": "future"}})
+    exchange = ccxt.binance({"timeout": 15000, "options": {"defaultType": "future"}})
     results = []
 
     for symbol in symbols:
@@ -267,7 +267,7 @@ def collect_crypto_price(symbols: list[str] | None = None) -> list[dict]:
     if symbols is None:
         symbols = get_crypto_watchlist()
 
-    exchange = ccxt.binance({"options": {"defaultType": "future"}})
+    exchange = ccxt.binance({"timeout": 15000, "options": {"defaultType": "future"}})
     results = []
 
     for symbol in symbols:

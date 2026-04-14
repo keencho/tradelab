@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -8,12 +9,22 @@ from db.database import SessionLocal
 from db.models import Price
 
 
+def _yf_download(ticker, **kwargs):
+    """yfinance는 타임아웃 인자가 없어서 스레드로 강제 종료."""
+    with ThreadPoolExecutor(max_workers=1) as ex:
+        fut = ex.submit(yf.download, ticker, progress=False, **kwargs)
+        try:
+            return fut.result(timeout=30)
+        except FuturesTimeout:
+            raise TimeoutError(f"yfinance timeout: {ticker}")
+
+
 def collect_stock_prices(tickers: list[str], period: str = "1d", interval: str = "1h"):
     """주식 가격 수집 (yfinance)"""
     db = SessionLocal()
     try:
         for ticker in tickers:
-            df = yf.download(ticker, period=period, interval=interval, progress=False)
+            df = _yf_download(ticker, period=period, interval=interval)
             if df.empty:
                 continue
 
@@ -38,7 +49,7 @@ def collect_stock_prices(tickers: list[str], period: str = "1d", interval: str =
 
 def collect_crypto_prices(symbols: list[str], timeframe: str = "1h", limit: int = 24):
     """코인 가격 수집 (ccxt/Binance)"""
-    exchange = ccxt.binance()
+    exchange = ccxt.binance({"timeout": 15000})
     db = SessionLocal()
     try:
         for symbol in symbols:
