@@ -81,13 +81,11 @@ def check_memory():
 
 
 def check_python_procs():
-    out = _run(["pgrep", "-fc", "venv/bin/python"])
-    try:
-        count = int(out)
-    except ValueError:
-        return
+    # ps -eo comm= 으로 실행파일명만 가져와서 python만 카운트 (sh/flock wrapper 제외)
+    out = _run(["ps", "-eo", "comm="])
+    count = sum(1 for line in out.splitlines() if line.strip() == "python")
     if count > 8:
-        _alert("pyprocs", f"python 프로세스 누적: {count}개 (> 8)")
+        _alert("pyprocs", f"python 인터프리터 누적: {count}개 (> 8)")
 
 
 def check_stuck_locks():
