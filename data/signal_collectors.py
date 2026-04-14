@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 import httpx
 
+# 타임아웃 없는 외부 라이브러리(fredapi, OpenDartReader) 보호
 socket.setdefaulttimeout(20)
 
 from config import (
@@ -710,10 +711,9 @@ def collect_all_signals() -> list[dict]:
 
 
 def collect_all_macro() -> list[dict]:
-    """매크로 지표 수집 (1시간 주기용)."""
+    """매크로 지표 수집 (1시간 주기용). DART는 별도 스크립트에서 처리."""
     all_data = []
     all_data.extend(collect_fred_macro())
     all_data.extend(collect_ecos_macro())
-    all_data.extend(collect_dart_insider())
-    logger.info(f"매크로/DART 수집 완료: {len(all_data)}건")
+    logger.info(f"매크로 수집 완료: {len(all_data)}건")
     return all_data
