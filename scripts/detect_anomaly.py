@@ -95,7 +95,6 @@ def run():
 
             signal = Signal(
                 ticker=anomaly["ticker"],
-                ticker_name=anomaly.get("ticker_name", ""),
                 signal_type=anomaly["signal_type"],
                 direction=anomaly["direction"],
                 confidence=anomaly["confidence"],

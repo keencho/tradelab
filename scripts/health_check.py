@@ -89,25 +89,38 @@ def check_python_procs():
 
 
 def check_stuck_locks():
-    """실제로 누가 락을 쥐고 있는 경우만 감지. mtime은 의미 없음(파일 생성 시각일 뿐)."""
+    """락 홀더가 있으면서 오래(>20분) 돌고 있는 경우만 감지."""
+    STUCK_THRESHOLD_SEC = 20 * 60
     stuck = []
     for p in Path("/tmp").glob("*.lock"):
-        # flock -n 시도 — 못 얻으면 누가 쥐고 있는 중
+        # health.lock은 이 스크립트 자신이 쥐고 있으므로 스킵
+        if p.name == "health.lock":
+            continue
+        # flock -n 시도 — 얻으면 아무도 안 쥐고 있음
         r = subprocess.run(
             ["flock", "-n", str(p), "-c", "true"],
             capture_output=True, timeout=3,
         )
-        if r.returncode != 0:
-            # 누가 쥐고 있는지 찾기 (mtime을 오래된 락의 지속 시간 추정에 활용)
-            try:
-                holder = _run(["ps", "-eo", "pid,etime,cmd"]).splitlines()
-                hit = [l for l in holder if f"flock" in l and p.name in l]
-                info = hit[0].strip() if hit else "holder unknown"
-            except Exception:
-                info = "holder unknown"
-            stuck.append(f"{p.name} ({info})")
+        if r.returncode == 0:
+            continue
+        # 홀더 찾고 경과 시간 파싱
+        ps_out = _run(["ps", "-eo", "pid,etimes,cmd"])
+        holder_line = None
+        for line in ps_out.splitlines():
+            if "flock" in line and p.name in line:
+                holder_line = line.strip()
+                break
+        if not holder_line:
+            continue
+        parts = holder_line.split(None, 2)
+        try:
+            etime_sec = int(parts[1])
+        except (IndexError, ValueError):
+            continue
+        if etime_sec > STUCK_THRESHOLD_SEC:
+            stuck.append(f"{p.name} ({etime_sec//60}분)")
     if stuck:
-        _alert("locks", f"락 보유 중인 프로세스 있음: {'; '.join(stuck)}")
+        _alert("locks", f"크론 stuck 의심: {', '.join(stuck)}")
 
 
 def check_app_healthz():
