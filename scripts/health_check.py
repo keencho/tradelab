@@ -89,17 +89,25 @@ def check_python_procs():
 
 
 def check_stuck_locks():
-    now = time.time()
+    """실제로 누가 락을 쥐고 있는 경우만 감지. mtime은 의미 없음(파일 생성 시각일 뿐)."""
     stuck = []
     for p in Path("/tmp").glob("*.lock"):
-        try:
-            age = now - p.stat().st_mtime
-            if age > 30 * 60:
-                stuck.append(f"{p.name}({int(age/60)}분)")
-        except Exception:
-            pass
+        # flock -n 시도 — 못 얻으면 누가 쥐고 있는 중
+        r = subprocess.run(
+            ["flock", "-n", str(p), "-c", "true"],
+            capture_output=True, timeout=3,
+        )
+        if r.returncode != 0:
+            # 누가 쥐고 있는지 찾기 (mtime을 오래된 락의 지속 시간 추정에 활용)
+            try:
+                holder = _run(["ps", "-eo", "pid,etime,cmd"]).splitlines()
+                hit = [l for l in holder if f"flock" in l and p.name in l]
+                info = hit[0].strip() if hit else "holder unknown"
+            except Exception:
+                info = "holder unknown"
+            stuck.append(f"{p.name} ({info})")
     if stuck:
-        _alert("locks", f"오래된 lock 파일: {', '.join(stuck)}")
+        _alert("locks", f"락 보유 중인 프로세스 있음: {'; '.join(stuck)}")
 
 
 def check_app_healthz():
