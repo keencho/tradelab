@@ -17,6 +17,25 @@ from analysis.llm import call_llm
 logger = get_logger("anomaly")
 
 
+_KR_NAME_CACHE: dict[str, str] = {}
+
+
+def _resolve_ticker_name(ticker: str, market: str, fallback: str) -> str:
+    if fallback:
+        return fallback
+    if market == "kr_stock":
+        if ticker in _KR_NAME_CACHE:
+            return _KR_NAME_CACHE[ticker]
+        try:
+            from pykrx import stock as krx
+            name = krx.get_market_ticker_name(ticker) or ""
+        except Exception:
+            name = ""
+        _KR_NAME_CACHE[ticker] = name
+        return name
+    return ""
+
+
 # data_type별 이상 탐지 설정
 # (threshold, direction_logic, description)
 # direction_logic: "high_bullish" = 높으면 bullish, "high_bearish" = 높으면 bearish
@@ -112,6 +131,7 @@ def detect_anomalies(lookback_days: int = 30) -> list[dict]:
                     Watchlist.ticker == ticker, Watchlist.market == market
                 ).first()
                 ticker_name = wl_row[0] if wl_row and wl_row[0] else ""
+                ticker_name = _resolve_ticker_name(ticker, market, ticker_name)
 
                 # 매크로는 extra.desc에서 가져오기
                 if not ticker_name and market == "macro":
@@ -152,15 +172,20 @@ def detect_price_anomalies() -> list[dict]:
     anomalies = []
 
     try:
-        # 최신 realtime_price 데이터 (종목별 마지막 1건)
+        # 최신 realtime_price 데이터 (종목별 마지막 1건, 최근 1시간 이내만)
         from sqlalchemy import func
+
+        fresh_cutoff = datetime.now(KST).replace(tzinfo=None) - timedelta(hours=1)
 
         latest_subq = (
             session.query(
                 SignalData.ticker,
                 func.max(SignalData.collected_at).label("max_at"),
             )
-            .filter(SignalData.data_type == "realtime_price")
+            .filter(
+                SignalData.data_type == "realtime_price",
+                SignalData.collected_at >= fresh_cutoff,
+            )
             .group_by(SignalData.ticker)
             .subquery()
         )
@@ -191,6 +216,7 @@ def detect_price_anomalies() -> list[dict]:
                 Watchlist.ticker == ticker, Watchlist.market == market
             ).first()
             ticker_name = wl_row[0] if wl_row and wl_row[0] else ""
+            ticker_name = _resolve_ticker_name(ticker, market, ticker_name)
 
             # 마켓별 가격 포맷
             if market == "crypto":

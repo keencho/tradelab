@@ -148,3 +148,58 @@ class PortfolioSetting(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     initial_capital: Mapped[float] = mapped_column(Float, default=100_000_000)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
+
+
+# ── 실투자 (sycho 전용) ─────────────────────────────────────
+
+class RealAccount(Base):
+    """실제 증권/거래소 계좌"""
+    __tablename__ = "real_accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner: Mapped[str] = mapped_column(String(30), index=True, default="sycho")
+    broker: Mapped[str] = mapped_column(String(20))             # toss/samsung/kis/upbit/...
+    account_type: Mapped[str] = mapped_column(String(20))       # regular_kr/regular_oversea/isa/pension/irp/crypto
+    nickname: Mapped[str] = mapped_column(String(50), default="")
+    currency: Mapped[str] = mapped_column(String(10), default="KRW")  # KRW/USD/USDT
+    is_active: Mapped[bool] = mapped_column(default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
+
+
+class RealHolding(Base):
+    """잔고 캐시 — 거래 입력 시 서비스단에서 갱신"""
+    __tablename__ = "real_holdings"
+    __table_args__ = (
+        UniqueConstraint("account_id", "ticker", name="uq_real_holding"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(Integer, index=True)
+    ticker: Mapped[str] = mapped_column(String(30))
+    ticker_name: Mapped[str] = mapped_column(String(100), default="")
+    market: Mapped[str] = mapped_column(String(10))             # kr_stock/us_stock/crypto
+    qty: Mapped[float] = mapped_column(Float, default=0.0)
+    avg_cost: Mapped[float] = mapped_column(Float, default=0.0)  # 이동평균 (수수료 포함)
+    realized_pnl: Mapped[float] = mapped_column(Float, default=0.0)
+    is_hidden: Mapped[bool] = mapped_column(default=False)  # 총 자산/원금 집계에서 제외
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
+
+
+class RealTrade(Base):
+    """실거래 내역"""
+    __tablename__ = "real_trades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(Integer, index=True)
+    ticker: Mapped[str] = mapped_column(String(30), index=True)
+    ticker_name: Mapped[str] = mapped_column(String(100), default="")
+    market: Mapped[str] = mapped_column(String(10))
+    side: Mapped[str] = mapped_column(String(10))               # buy/sell/dividend
+    qty: Mapped[float] = mapped_column(Float)
+    price: Mapped[float] = mapped_column(Float)
+    fee: Mapped[float] = mapped_column(Float, default=0.0)
+    tax: Mapped[float] = mapped_column(Float, default=0.0)
+    realized_pnl: Mapped[float] = mapped_column(Float, default=0.0)  # 매도건만 계산
+    executed_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst, index=True)
+    memo: Mapped[str] = mapped_column(String(200), default="")

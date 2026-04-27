@@ -1,3 +1,4 @@
+import asyncio
 import re
 from datetime import datetime, timedelta
 
@@ -7,12 +8,14 @@ from fastapi.responses import JSONResponse
 
 from config import (
     KST, FINNHUB_API_KEY, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET,
-    SIGNAL_TYPE_NAMES, get_logger,
+    SIGNAL_TYPE_NAMES, BROKER_FEES, BROKER_NAMES,
+    ACCOUNT_TYPE_NAMES, ACCOUNT_TYPE_MARKET, IS_LOCAL, get_logger,
 )
 from db.database import SessionLocal
-from db.models import Signal, ResearchTicker, ResearchHistory
+from db.models import Signal, ResearchTicker, ResearchHistory, RealAccount, RealHolding, RealTrade
 from analysis.llm import call_llm
-from routes.auth import reset_session, require_auth, logout, COOKIE_NAME
+from routes.auth import reset_session, require_auth, logout, get_current_user, COOKIE_NAME
+from services import real_trader
 
 router = APIRouter()
 logger = get_logger("api")
@@ -654,3 +657,569 @@ def _generate_report(ticker: str, ticker_name: str, market: str,
 
     result = call_llm(prompt)
     return result or ""
+
+
+# ── 실투자 (로그인 사용자별) ─────────────────────────────────
+
+def _require_user(request: Request) -> tuple[str | None, Response | None]:
+    """로그인된 username 반환. 미인증이면 (None, 401 Response).
+    로컬 환경에서는 외부 시세 호출 회피를 위해 전체 차단."""
+    if IS_LOCAL:
+        return None, JSONResponse(status_code=403, content={"error": "내 자산 기능은 서버 환경에서만 사용 가능합니다"})
+    user = get_current_user(request)
+    if not user or user == "unknown":
+        return None, JSONResponse(status_code=401, content={"error": "login required"})
+    return user, None
+
+
+def _own_account(session, account_id: int, user: str) -> RealAccount | None:
+    return session.query(RealAccount).filter(
+        RealAccount.id == account_id, RealAccount.owner == user
+    ).first()
+
+
+@router.get("/my/accounts")
+async def my_accounts_list(request: Request):
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    session = SessionLocal()
+    try:
+        rows = (
+            session.query(RealAccount)
+            .filter(RealAccount.owner == user)
+            .order_by(RealAccount.sort_order, RealAccount.id)
+            .all()
+        )
+        return [{
+            "id": r.id,
+            "broker": r.broker,
+            "broker_name": BROKER_NAMES.get(r.broker, r.broker),
+            "account_type": r.account_type,
+            "account_type_name": ACCOUNT_TYPE_NAMES.get(r.account_type, r.account_type),
+            "nickname": r.nickname,
+            "currency": r.currency,
+            "is_active": r.is_active,
+        } for r in rows]
+    finally:
+        session.close()
+
+
+@router.post("/my/accounts")
+async def my_accounts_create(request: Request):
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    body = await request.json()
+    broker = (body.get("broker") or "").strip()
+    account_type = (body.get("account_type") or "").strip()
+    nickname = (body.get("nickname") or "").strip()
+    currency = (body.get("currency") or "KRW").strip()
+
+    if not broker or not account_type:
+        return JSONResponse(status_code=400, content={"error": "broker, account_type required"})
+    if (broker, account_type) not in BROKER_FEES:
+        return JSONResponse(status_code=400, content={"error": "지원하지 않는 (브로커, 계좌유형) 조합"})
+
+    session = SessionLocal()
+    try:
+        count = session.query(RealAccount).filter(RealAccount.owner == user).count()
+        acc = RealAccount(
+            owner=user, broker=broker, account_type=account_type,
+            nickname=nickname or f"{BROKER_NAMES.get(broker, broker)} {ACCOUNT_TYPE_NAMES.get(account_type, '')}".strip(),
+            currency=currency, is_active=True, sort_order=count,
+        )
+        session.add(acc)
+        session.commit()
+        return {"id": acc.id, "status": "ok"}
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+@router.post("/my/accounts/reorder")
+async def my_accounts_reorder(request: Request):
+    """계좌 순서 일괄 갱신.
+    body: { order: [account_id, ...] }
+    """
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    body = await request.json()
+    order = body.get("order") or []
+    if not isinstance(order, list):
+        return JSONResponse(status_code=400, content={"error": "order must be list"})
+
+    session = SessionLocal()
+    try:
+        rows = {a.id: a for a in session.query(RealAccount).filter(RealAccount.owner == user).all()}
+        for idx, aid in enumerate(order):
+            try:
+                acc = rows.get(int(aid))
+            except (TypeError, ValueError):
+                continue
+            if acc:
+                acc.sort_order = idx
+        session.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+@router.put("/my/accounts/{account_id}")
+async def my_accounts_update(request: Request, account_id: int):
+    """계좌 별명만 수정 (broker/account_type/currency는 변경 시 회계가 깨질 위험 있어 제외)."""
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    body = await request.json()
+    nickname = (body.get("nickname") or "").strip()
+    if not nickname:
+        return JSONResponse(status_code=400, content={"error": "별명 필수"})
+
+    session = SessionLocal()
+    try:
+        acc = _own_account(session, account_id, user)
+        if not acc:
+            return JSONResponse(status_code=404, content={"error": "not found"})
+        acc.nickname = nickname
+        session.commit()
+        return {"status": "ok", "nickname": acc.nickname}
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+@router.delete("/my/accounts/{account_id}")
+async def my_accounts_delete(request: Request, account_id: int):
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    session = SessionLocal()
+    try:
+        acc = _own_account(session, account_id, user)
+        if not acc:
+            return JSONResponse(status_code=404, content={"error": "not found"})
+        session.query(RealHolding).filter(RealHolding.account_id == account_id).delete()
+        session.query(RealTrade).filter(RealTrade.account_id == account_id).delete()
+        session.delete(acc)
+        session.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+@router.get("/my/fee-preview")
+async def my_fee_preview(request: Request, account_id: int, side: str, price: float, qty: float):
+    """수수료/세금 미리보기."""
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    session = SessionLocal()
+    try:
+        acc = _own_account(session, account_id, user)
+        if not acc:
+            return JSONResponse(status_code=404, content={"error": "account not found"})
+        fee, tax = real_trader.calc_fee_tax(acc.broker, acc.account_type, side, price, qty)
+        return {"fee": fee, "tax": tax, "net": price * qty - fee - tax if side == "sell" else price * qty + fee}
+    finally:
+        session.close()
+
+
+def _parse_trade_body(body: dict):
+    """공통: POST/PUT body 파싱."""
+    try:
+        account_id = int(body.get("account_id"))
+        ticker = (body.get("ticker") or "").strip()
+        ticker_name = (body.get("ticker_name") or "").strip()
+        side = (body.get("side") or "").strip()
+        qty = float(body.get("qty") or 0)
+        price = float(body.get("price") or 0)
+        memo = (body.get("memo") or "").strip()
+    except (TypeError, ValueError):
+        raise ValueError("invalid body")
+
+    fee = body.get("fee")
+    tax = body.get("tax")
+    fee = float(fee) if fee not in (None, "") else None
+    tax = float(tax) if tax not in (None, "") else None
+
+    executed_at = None
+    if body.get("executed_at"):
+        try:
+            executed_at = datetime.fromisoformat(body["executed_at"])
+        except ValueError:
+            pass
+
+    if not ticker or side not in ("buy", "sell", "dividend") or qty <= 0 or price < 0:
+        raise ValueError("ticker/side/qty/price 필수")
+
+    return {
+        "account_id": account_id, "ticker": ticker, "ticker_name": ticker_name,
+        "side": side, "qty": qty, "price": price, "fee": fee, "tax": tax,
+        "executed_at": executed_at, "memo": memo,
+    }
+
+
+@router.post("/my/trades")
+async def my_trades_create(request: Request):
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    body = await request.json()
+    try:
+        p = _parse_trade_body(body)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+    session = SessionLocal()
+    try:
+        acc = _own_account(session, p["account_id"], user)
+        if not acc:
+            return JSONResponse(status_code=404, content={"error": "account not found"})
+
+        trade = real_trader.add_trade(
+            session, p["account_id"], p["ticker"], p["ticker_name"],
+            p["side"], p["qty"], p["price"], fee=p["fee"], tax=p["tax"],
+            executed_at=p["executed_at"], memo=p["memo"],
+        )
+        session.commit()
+        return {"id": trade.id, "fee": trade.fee, "tax": trade.tax, "realized_pnl": trade.realized_pnl}
+    except ValueError as e:
+        session.rollback()
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception as e:
+        session.rollback()
+        logger.error(f"my_trades_create: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+@router.get("/my/trades/{trade_id}")
+async def my_trades_get(request: Request, trade_id: int):
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    session = SessionLocal()
+    try:
+        t = session.query(RealTrade).filter(RealTrade.id == trade_id).first()
+        if not t:
+            return JSONResponse(status_code=404, content={"error": "not found"})
+        acc = _own_account(session, t.account_id, user)
+        if not acc:
+            return JSONResponse(status_code=404, content={"error": "not found"})
+        return {
+            "id": t.id, "account_id": t.account_id, "ticker": t.ticker,
+            "ticker_name": t.ticker_name, "market": t.market, "side": t.side,
+            "qty": t.qty, "price": t.price, "fee": t.fee, "tax": t.tax,
+            "realized_pnl": t.realized_pnl,
+            "executed_at": t.executed_at.strftime("%Y-%m-%dT%H:%M") if t.executed_at else None,
+            "memo": t.memo,
+        }
+    finally:
+        session.close()
+
+
+@router.put("/my/trades/{trade_id}")
+async def my_trades_update(request: Request, trade_id: int):
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    body = await request.json()
+    try:
+        p = _parse_trade_body(body)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+    session = SessionLocal()
+    try:
+        t = session.query(RealTrade).filter(RealTrade.id == trade_id).first()
+        if not t:
+            return JSONResponse(status_code=404, content={"error": "not found"})
+        # 기존 trade 의 owner 확인
+        acc = _own_account(session, t.account_id, user)
+        if not acc:
+            return JSONResponse(status_code=404, content={"error": "not found"})
+        # 새 account_id 도 owner 확인 (계좌 변경 가능)
+        if p["account_id"] != t.account_id:
+            new_acc = _own_account(session, p["account_id"], user)
+            if not new_acc:
+                return JSONResponse(status_code=400, content={"error": "대상 계좌 권한 없음"})
+
+        real_trader.update_trade(session, trade_id, p)
+        session.commit()
+        return {"status": "ok"}
+    except ValueError as e:
+        session.rollback()
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception as e:
+        session.rollback()
+        logger.error(f"my_trades_update: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+@router.post("/my/holdings/{holding_id}/toggle-hidden")
+async def my_holdings_toggle_hidden(request: Request, holding_id: int):
+    """보유종목 숨김 토글 (집계에서 제외)."""
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    session = SessionLocal()
+    try:
+        h = session.query(RealHolding).filter(RealHolding.id == holding_id).first()
+        if not h:
+            return JSONResponse(status_code=404, content={"error": "not found"})
+        acc = _own_account(session, h.account_id, user)
+        if not acc:
+            return JSONResponse(status_code=404, content={"error": "not found"})
+
+        h.is_hidden = not h.is_hidden
+        session.commit()
+        return {"status": "ok", "is_hidden": h.is_hidden}
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+@router.delete("/my/trades/{trade_id}")
+async def my_trades_delete(request: Request, trade_id: int):
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    session = SessionLocal()
+    try:
+        t = session.query(RealTrade).filter(RealTrade.id == trade_id).first()
+        if not t:
+            return JSONResponse(status_code=404, content={"error": "not found"})
+        acc = _own_account(session, t.account_id, user)
+        if not acc:
+            return JSONResponse(status_code=404, content={"error": "not found"})
+
+        real_trader.delete_trade(session, trade_id)
+        session.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+def _fetch_upbit_prices_batch(tickers: list[str]) -> dict[str, dict]:
+    """Upbit로 KRW 코인 가격 일괄 조회 — 1번 호출."""
+    if not tickers:
+        return {}
+    markets = ",".join(f"KRW-{t}" for t in tickers)
+    try:
+        resp = httpx.get(
+            "https://api.upbit.com/v1/ticker",
+            params={"markets": markets},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        result = {}
+        for item in resp.json():
+            market = item.get("market", "")
+            tk = market.split("-", 1)[1] if "-" in market else ""
+            if not tk:
+                continue
+            result[tk] = {
+                "price": float(item.get("trade_price", 0) or 0),
+                "change_pct": float(item.get("signed_change_rate", 0) or 0) * 100,
+            }
+        return result
+    except Exception as e:
+        logger.error(f"Upbit batch: {e}")
+        return {}
+
+
+def _fetch_binance_prices_batch(tickers: list[str]) -> dict[str, dict]:
+    """Binance USDT futures 가격 일괄 조회 — 1번 호출."""
+    if not tickers:
+        return {}
+    import json as _json
+    symbols = [f"{t}USDT" for t in tickers]
+    try:
+        resp = httpx.get(
+            "https://fapi.binance.com/fapi/v1/ticker/24hr",
+            params={"symbols": _json.dumps(symbols)},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        result = {}
+        for item in resp.json():
+            sym = item.get("symbol", "")
+            if sym.endswith("USDT"):
+                tk = sym[:-4]
+                result[tk] = {
+                    "price": float(item.get("lastPrice", 0) or 0),
+                    "change_pct": float(item.get("priceChangePercent", 0) or 0),
+                }
+        return result
+    except Exception as e:
+        logger.error(f"Binance batch: {e}")
+        return {}
+
+
+@router.get("/my/refresh")
+async def my_refresh_prices(request: Request):
+    """모든 보유종목의 현재가를 즉시 fetch (배치 + 병렬)."""
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    session = SessionLocal()
+    try:
+        accounts = {
+            a.id: a for a in
+            session.query(RealAccount).filter(RealAccount.owner == user).all()
+        }
+        if not accounts:
+            return {"holdings": [], "by_account": {}, "by_currency": {}, "fetched_at": ""}
+
+        all_holdings = (
+            session.query(RealHolding)
+            .filter(RealHolding.account_id.in_(accounts.keys()))
+            .all()
+        )
+        holdings = [h for h in all_holdings if h.qty > 0]   # 표시/평가용 (qty>0)
+        closed_holdings = [h for h in all_holdings if h.qty == 0]  # realized 합산 전용
+    finally:
+        session.close()
+
+    # (market, currency) → tickers 그룹화
+    groups: dict[tuple[str, str], set] = {}
+    for h in holdings:
+        acc = accounts.get(h.account_id)
+        ccy = acc.currency if acc else "KRW"
+        groups.setdefault((h.market, ccy), set()).add(h.ticker)
+
+    price_map: dict[tuple[str, str, str], dict] = {}  # (ticker, market, ccy) → {price, change_pct}
+
+    async def kr_one(ticker: str):
+        data = await asyncio.to_thread(_fetch_price, ticker, "kr_stock")
+        price_map[(ticker, "kr_stock", "KRW")] = data
+
+    async def us_one(ticker: str, ccy: str):
+        data = await asyncio.to_thread(_fetch_price, ticker, "us_stock")
+        price_map[(ticker, "us_stock", ccy)] = data
+
+    async def crypto_krw_batch(tickers: list[str]):
+        data = await asyncio.to_thread(_fetch_upbit_prices_batch, tickers)
+        for tk, val in data.items():
+            price_map[(tk, "crypto", "KRW")] = val
+
+    async def crypto_usdt_batch(tickers: list[str], ccy: str):
+        data = await asyncio.to_thread(_fetch_binance_prices_batch, tickers)
+        for tk, val in data.items():
+            price_map[(tk, "crypto", ccy)] = val
+
+    tasks = []
+    for (market, ccy), tickers in groups.items():
+        tickers_list = list(tickers)
+        if market == "kr_stock":
+            for t in tickers_list:
+                tasks.append(kr_one(t))
+        elif market == "us_stock":
+            for t in tickers_list:
+                tasks.append(us_one(t, ccy))
+        elif market == "crypto" and ccy == "KRW":
+            tasks.append(crypto_krw_batch(tickers_list))
+        elif market == "crypto":
+            tasks.append(crypto_usdt_batch(tickers_list, ccy))
+
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    # 집계
+    out_holdings = []
+    by_account: dict[int, dict] = {}
+
+    for h in holdings:
+        acc = accounts.get(h.account_id)
+        ccy = acc.currency if acc else "KRW"
+        info = price_map.get((h.ticker, h.market, ccy), {})
+        cur = info.get("price", 0)
+        change_pct = info.get("change_pct", 0)
+
+        eval_amt = cur * h.qty
+        cost_amt = h.avg_cost * h.qty
+        unrealized = eval_amt - cost_amt
+        unrealized_pct = (unrealized / cost_amt * 100) if cost_amt > 0 else 0
+
+        out_holdings.append({
+            "id": h.id,
+            "account_id": h.account_id,
+            "ticker": h.ticker,
+            "ticker_name": h.ticker_name,
+            "market": h.market,
+            "qty": h.qty,
+            "avg_cost": h.avg_cost,
+            "current_price": cur,
+            "change_pct": change_pct,
+            "eval_amount": eval_amt,
+            "cost_amount": cost_amt,
+            "unrealized_pnl": unrealized,
+            "unrealized_pct": unrealized_pct,
+            "realized_pnl": h.realized_pnl,
+            "is_hidden": h.is_hidden,
+        })
+
+        # 숨김 종목은 계좌별/통화별 집계에서 제외
+        if h.is_hidden:
+            continue
+
+        agg = by_account.setdefault(h.account_id, {
+            "currency": ccy, "eval": 0.0, "cost": 0.0,
+            "unrealized": 0.0, "realized": 0.0,
+        })
+        agg["eval"] += eval_amt
+        agg["cost"] += cost_amt
+        agg["unrealized"] += unrealized
+        agg["realized"] += h.realized_pnl
+
+    # 닫힌 포지션 (qty=0) 의 실현손익도 합산에 포함 (숨김 제외)
+    for h in closed_holdings:
+        if h.is_hidden:
+            continue
+        acc = accounts.get(h.account_id)
+        if not acc:
+            continue
+        ccy = acc.currency
+        agg = by_account.setdefault(h.account_id, {
+            "currency": ccy, "eval": 0.0, "cost": 0.0,
+            "unrealized": 0.0, "realized": 0.0,
+        })
+        agg["realized"] += h.realized_pnl
+
+    # 통화별 합산
+    by_currency: dict[str, dict] = {}
+    for acc_id, agg in by_account.items():
+        ccy = agg["currency"]
+        c = by_currency.setdefault(ccy, {"eval": 0.0, "cost": 0.0, "unrealized": 0.0, "realized": 0.0})
+        c["eval"] += agg["eval"]
+        c["cost"] += agg["cost"]
+        c["unrealized"] += agg["unrealized"]
+        c["realized"] += agg["realized"]
+
+    return {
+        "holdings": out_holdings,
+        "by_account": by_account,
+        "by_currency": by_currency,
+        "fetched_at": datetime.now(KST).strftime("%H:%M:%S"),
+    }

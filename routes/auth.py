@@ -139,3 +139,16 @@ def logout(request: Request):
     token = request.cookies.get(COOKIE_NAME)
     if token and token in _sessions:
         del _sessions[token]
+
+
+def get_current_user(request: Request) -> str:
+    """현재 로그인 username 반환. 인증 비활성화면 'sycho' (로컬 개발용)."""
+    if not AUTH_ENABLED:
+        return "sycho"
+    token = request.cookies.get(COOKIE_NAME)
+    if token and token in _sessions:
+        expire, username = _sessions[token]
+        if time.time() <= expire:
+            return username
+    # 쿠키 없거나 만료 — Basic Auth 헤더에서 추출
+    return _get_username(request)

@@ -470,7 +470,7 @@ def collect_dart_insider() -> list[dict]:
     results = []
     today = datetime.now(KST).strftime("%Y%m%d")
 
-    # 당일 공시 목록 조회
+    # 당일 공시 목록 조회 — dart.fss.or.kr 스크래핑, 타임아웃은 scripts/collect_dart.py의 signal.alarm에서 관리
     try:
         df = api.list_date_ex(today)
         if df is not None and not df.empty:

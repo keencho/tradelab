@@ -5,10 +5,13 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_
 
-from config import AUTH_ENABLED, MARKET_NAMES, SIGNAL_TYPE_NAMES, get_logger
+from config import (
+    AUTH_ENABLED, MARKET_NAMES, SIGNAL_TYPE_NAMES, IS_LOCAL,
+    BROKER_NAMES, ACCOUNT_TYPE_NAMES, get_logger,
+)
 from db.database import SessionLocal
-from db.models import News, Signal
-from routes.auth import require_auth, create_session, COOKIE_NAME, _get_client_ip
+from db.models import News, Signal, RealAccount, RealHolding, RealTrade
+from routes.auth import require_auth, create_session, get_current_user, COOKIE_NAME, _get_client_ip
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -92,6 +95,8 @@ def _page_response(request: Request, template: str, context: dict) -> Response:
         return denied
 
     context["auth_enabled"] = AUTH_ENABLED
+    context["user"] = get_current_user(request)
+    context["is_local"] = IS_LOCAL
     response = templates.TemplateResponse(request, template, context)
 
     # 쿠키 없으면 새 세션 발급 (Basic Auth로 최초 통과한 경우)
@@ -384,6 +389,253 @@ async def news(request: Request):
             "impact_filter": impact_min,
             "date_from": date_from,
             "date_to": date_to,
+        })
+    finally:
+        session.close()
+
+
+# ── 실투자 (로그인 사용자별) ─────────────────────────────────
+
+TRADES_PER_PAGE = 30
+
+
+def _block_local() -> Response | None:
+    """로컬 환경에서는 /my/* 페이지 접근 차단 (외부 시세 호출 회피)."""
+    if IS_LOCAL:
+        return HTMLResponse(
+            """<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>접근 불가</title>
+            <style>body{margin:0;background:#17171B;color:#F2F4F6;font-family:-apple-system,sans-serif;
+            display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:20px;}
+            h1{font-size:18px;margin:0 0 8px;}p{color:#8B95A1;font-size:14px;margin:4px 0;}
+            a{color:#3182F6;text-decoration:none;font-size:13px;display:inline-block;margin-top:16px;}</style>
+            </head><body><div><h1>로컬 환경에서는 사용할 수 없습니다</h1>
+            <p>'내 자산' 기능은 서버 환경에서만 동작합니다.</p>
+            <a href="/">← 대시보드로</a></div></body></html>""",
+            status_code=403,
+        )
+    return None
+
+
+@router.get("/my/report", response_class=HTMLResponse)
+async def my_report(request: Request):
+    denied = _auth_or_401(request)
+    if denied:
+        return denied
+    blocked = _block_local()
+    if blocked:
+        return blocked
+
+    user = get_current_user(request)
+    session = SessionLocal()
+    try:
+        accounts = (
+            session.query(RealAccount)
+            .filter(RealAccount.owner == user)
+            .order_by(RealAccount.sort_order, RealAccount.id)
+            .all()
+        )
+        account_ids = [a.id for a in accounts]
+
+        if not account_ids:
+            return _page_response(request, "pages/my_report.html", {
+                "request": request, "page": "my", "empty": True,
+                "accounts": [], "kpi": {}, "monthly": [], "top_tickers": [],
+                "by_account": [], "by_market": [],
+            })
+
+        trades = (
+            session.query(RealTrade)
+            .filter(RealTrade.account_id.in_(account_ids))
+            .order_by(RealTrade.executed_at.asc())
+            .all()
+        )
+        holdings = (
+            session.query(RealHolding)
+            .filter(RealHolding.account_id.in_(account_ids), RealHolding.qty > 0)
+            .all()
+        )
+
+        # KPI
+        total_realized = sum(t.realized_pnl for t in trades)
+        total_fee = sum(t.fee for t in trades)
+        total_tax = sum(t.tax for t in trades)
+        buy_count = sum(1 for t in trades if t.side == "buy")
+        sell_count = sum(1 for t in trades if t.side == "sell")
+        div_count = sum(1 for t in trades if t.side == "dividend")
+        total_cost_open = sum(h.avg_cost * h.qty for h in holdings)
+
+        # 월별 실현손익 (매도 + 배당 기준)
+        monthly_map: dict[str, float] = {}
+        for t in trades:
+            if t.side not in ("sell", "dividend"):
+                continue
+            key = t.executed_at.strftime("%Y-%m")
+            monthly_map[key] = monthly_map.get(key, 0) + t.realized_pnl
+        monthly = [{"month": k, "pnl": v} for k, v in sorted(monthly_map.items())]
+
+        # 종목별 누적 (실현 + 미실현 평가는 못 — current 가격 없으니 실현만)
+        ticker_map: dict[tuple[str, str], dict] = {}
+        for t in trades:
+            key = (t.ticker, t.ticker_name or t.ticker)
+            row = ticker_map.setdefault(key, {"ticker": t.ticker, "name": t.ticker_name or t.ticker, "realized": 0.0, "fee": 0.0, "tax": 0.0, "trades": 0})
+            row["realized"] += t.realized_pnl
+            row["fee"] += t.fee
+            row["tax"] += t.tax
+            row["trades"] += 1
+        top_tickers = sorted(ticker_map.values(), key=lambda r: r["realized"], reverse=True)
+        # 절대값 기준 TOP 10 (이익+손실 양쪽)
+        top_abs = sorted(ticker_map.values(), key=lambda r: abs(r["realized"]), reverse=True)[:10]
+
+        # 계좌별 취득금액 비중 (현재 보유 기준)
+        acc_meta = {a.id: {"nickname": a.nickname, "broker": a.broker, "currency": a.currency} for a in accounts}
+        by_account: dict[int, float] = {}
+        for h in holdings:
+            by_account[h.account_id] = by_account.get(h.account_id, 0) + h.avg_cost * h.qty
+        by_account_list = [
+            {"name": acc_meta[aid]["nickname"], "value": v, "currency": acc_meta[aid]["currency"]}
+            for aid, v in by_account.items()
+        ]
+
+        # 시장별
+        by_market: dict[str, float] = {}
+        for h in holdings:
+            by_market[h.market] = by_market.get(h.market, 0) + h.avg_cost * h.qty
+        market_label = {"kr_stock": "한국주식", "us_stock": "미국주식", "crypto": "코인"}
+        by_market_list = [
+            {"name": market_label.get(m, m), "value": v}
+            for m, v in by_market.items()
+        ]
+
+        return _page_response(request, "pages/my_report.html", {
+            "request": request,
+            "page": "my",
+            "empty": False,
+            "accounts": accounts,
+            "kpi": {
+                "total_realized": total_realized,
+                "total_fee": total_fee,
+                "total_tax": total_tax,
+                "trade_count": len(trades),
+                "buy_count": buy_count,
+                "sell_count": sell_count,
+                "div_count": div_count,
+                "total_cost_open": total_cost_open,
+                "holding_count": len(holdings),
+            },
+            "monthly": monthly,
+            "top_tickers": top_abs,
+            "by_account": by_account_list,
+            "by_market": by_market_list,
+        })
+    finally:
+        session.close()
+
+
+@router.get("/my", response_class=HTMLResponse)
+async def my_assets(request: Request):
+    denied = _auth_or_401(request)
+    if denied:
+        return denied
+    blocked = _block_local()
+    if blocked:
+        return blocked
+
+    user = get_current_user(request)
+
+    # 거래내역 필터
+    q = request.query_params.get("q", "").strip()
+    side_filter = request.query_params.get("side", "")
+    try:
+        acc_filter = int(request.query_params.get("acc", "") or 0)
+    except ValueError:
+        acc_filter = 0
+    try:
+        page = max(1, int(request.query_params.get("page", "1")))
+    except ValueError:
+        page = 1
+
+    session = SessionLocal()
+    try:
+        accounts = (
+            session.query(RealAccount)
+            .filter(RealAccount.owner == user)
+            .order_by(RealAccount.sort_order, RealAccount.id)
+            .all()
+        )
+        account_ids = [a.id for a in accounts]
+
+        holdings = []
+        closed_holdings = []
+        trades = []
+        total_trades = 0
+        total_pages = 1
+        if account_ids:
+            all_h = (
+                session.query(RealHolding)
+                .filter(RealHolding.account_id.in_(account_ids))
+                .all()
+            )
+            holdings = [h for h in all_h if h.qty > 0]
+            closed_holdings = [h for h in all_h if h.qty == 0 and h.realized_pnl != 0]
+
+            tq = session.query(RealTrade).filter(RealTrade.account_id.in_(account_ids))
+            if q:
+                tq = tq.filter(or_(
+                    RealTrade.ticker.ilike(f"%{q}%"),
+                    RealTrade.ticker_name.ilike(f"%{q}%"),
+                ))
+            if side_filter in ("buy", "sell", "dividend"):
+                tq = tq.filter(RealTrade.side == side_filter)
+            if acc_filter and acc_filter in account_ids:
+                tq = tq.filter(RealTrade.account_id == acc_filter)
+
+            total_trades = tq.count()
+            total_pages = max(1, math.ceil(total_trades / TRADES_PER_PAGE))
+            page = min(page, total_pages)
+
+            trades = (
+                tq.order_by(RealTrade.executed_at.desc(), RealTrade.id.desc())
+                .offset((page - 1) * TRADES_PER_PAGE)
+                .limit(TRADES_PER_PAGE)
+                .all()
+            )
+
+        account_map = {
+            a.id: {
+                "id": a.id,
+                "broker": a.broker,
+                "broker_name": BROKER_NAMES.get(a.broker, a.broker),
+                "account_type": a.account_type,
+                "account_type_name": ACCOUNT_TYPE_NAMES.get(a.account_type, a.account_type),
+                "nickname": a.nickname,
+                "currency": a.currency,
+            } for a in accounts
+        }
+
+        holdings_by_account = {a.id: [] for a in accounts}
+        for h in holdings:
+            holdings_by_account.setdefault(h.account_id, []).append(h)
+
+        closed_by_account = {a.id: [] for a in accounts}
+        for h in closed_holdings:
+            closed_by_account.setdefault(h.account_id, []).append(h)
+
+        return _page_response(request, "pages/my.html", {
+            "request": request,
+            "page": "my",
+            "accounts": accounts,
+            "account_map": account_map,
+            "holdings_by_account": holdings_by_account,
+            "closed_by_account": closed_by_account,
+            "trades": trades,
+            "broker_options": BROKER_NAMES,
+            "account_type_options": ACCOUNT_TYPE_NAMES,
+            "trade_q": q,
+            "trade_side": side_filter,
+            "trade_acc": acc_filter,
+            "trade_page": page,
+            "trade_total_pages": total_pages,
+            "trade_total": total_trades,
         })
     finally:
         session.close()

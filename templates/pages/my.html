@@ -1,0 +1,1529 @@
+{% extends "base.html" %}
+{% block title_suffix %} — My{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<style>
+    /* 카드 hover */
+    .acc-card { transition: transform .15s ease, box-shadow .15s ease; }
+    .acc-card:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+
+    /* 그라데이션 hero */
+    .hero-grad {
+        background:
+            radial-gradient(circle at 20% 0%, rgba(49,130,246,.18) 0%, transparent 45%),
+            radial-gradient(circle at 80% 100%, rgba(240,68,82,.10) 0%, transparent 45%),
+            #212226;
+    }
+
+    /* 숫자 깜빡 효과 (라이브 갱신 표시) */
+    @keyframes flash-up { 0% { background: rgba(240,68,82,.18); } 100% { background: transparent; } }
+    @keyframes flash-down { 0% { background: rgba(49,130,246,.18); } 100% { background: transparent; } }
+    .flash-up { animation: flash-up .8s ease-out; }
+    .flash-down { animation: flash-down .8s ease-out; }
+
+    /* 라이브 인디케이터 점 */
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+    .live-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+
+    /* 스피너 */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin .9s linear infinite; }
+
+    /* 모달 등장 */
+    @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .modal-in { animation: modal-in .18s ease-out; }
+
+    /* 셀 호버 */
+    .holding-row:hover { background: rgba(49,130,246,.04); }
+
+    /* DnD */
+    .drag-handle { cursor: grab; }
+    .drag-handle:active { cursor: grabbing; }
+    .sortable-ghost { opacity: .35; }
+    .sortable-chosen { box-shadow: 0 12px 32px rgba(0,0,0,.4); }
+    .sortable-drag { opacity: .9; }
+
+    /* 숨김 종목 */
+    .is-hidden-row { opacity: .45; }
+    .is-hidden-row .hide-strike { text-decoration: line-through; text-decoration-color: rgba(139,149,161,.6); }
+    .hidden-chip {
+        font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 6px;
+        background: rgba(139,149,161,.15); color: #8B95A1; letter-spacing: .03em;
+        display: inline-flex; align-items: center; gap: 3px;
+    }
+    .row-action-btn {
+        opacity: 0; transition: opacity .15s ease;
+        color: #8B95A1; padding: 4px;
+    }
+    .holding-row:hover .row-action-btn,
+    .row-action-btn.active { opacity: 1; }
+    .row-action-btn:hover { color: #F2F4F6; }
+    .row-action-btn.active { color: #3182F6; }
+
+    /* details 화살표 */
+    details[open] .details-arrow { transform: rotate(90deg); }
+
+    /* 브로커 칩 컬러 */
+    .chip-toss     { background: rgba(0, 110, 240, .12); color: #4D9FFF; }
+    .chip-samsung  { background: rgba(20, 70, 160, .15); color: #7AB1FF; }
+    .chip-kis      { background: rgba(255, 159, 0, .12); color: #FFB852; }
+    .chip-upbit    { background: rgba(0, 132, 255, .14); color: #4DA9FF; }
+    .chip-bithumb  { background: rgba(245, 90, 30, .12); color: #FF9061; }
+    .chip-binance  { background: rgba(240, 185, 11, .14); color: #F0B90B; }
+    .chip-bybit    { background: rgba(255, 113, 24, .12); color: #FF9148; }
+
+    /* Segmented control */
+    .seg-btn { padding: 10px; border-radius: 12px; font-size: 13px; font-weight: 600; transition: all .12s; cursor: pointer; }
+
+    /* 입력 필드 정리 */
+    .my-input {
+        width: 100%; background: #2C2D33; border: 0; border-radius: 12px;
+        padding: 10px 12px; font-size: 14px; color: #F2F4F6; outline: none;
+        transition: box-shadow .12s;
+    }
+    .my-input:focus { box-shadow: 0 0 0 2px rgba(49,130,246,.5); }
+    .my-input::placeholder { color: #8B95A1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- ─────── 헤더 ─────── -->
+<div class="flex items-center justify-between mb-5 flex-wrap gap-3">
+    <div>
+        <h2 class="text-xl lg:text-2xl font-bold text-white">내 자산</h2>
+        <p class="text-xs text-muted mt-0.5">실투자 관리 · 평단/실현손익 자동 계산</p>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+        <button onclick="toggleMask()" id="mask-btn"
+            class="h-9 px-3 text-xs rounded-xl bg-elevated text-muted hover:text-white transition-colors flex items-center gap-1.5">
+            <svg id="mask-icon-show" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+            </svg>
+            <svg id="mask-icon-hide" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/>
+            </svg>
+            <span id="mask-label">숨기기</span>
+        </button>
+
+        <button onclick="refreshNow()" id="refresh-btn"
+            class="h-9 px-3 text-xs rounded-xl bg-toss text-white hover:bg-toss/90 transition-colors flex items-center gap-1.5 font-medium">
+            <svg id="refresh-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <span id="refresh-label">새로고침</span>
+        </button>
+
+        <button onclick="toggleLive()" id="live-btn"
+            class="h-9 px-3 text-xs rounded-xl bg-elevated text-muted hover:text-white transition-colors flex items-center gap-1.5">
+            <span id="live-dot" class="w-1.5 h-1.5 rounded-full bg-muted"></span>
+            <span id="live-label">실시간 OFF</span>
+        </button>
+
+        <div class="w-px h-6 bg-elevated mx-1"></div>
+
+        <a href="/my/report"
+            class="h-9 px-3 text-xs rounded-xl bg-elevated text-white hover:bg-elevated/70 transition-colors flex items-center gap-1.5 font-medium">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+            리포트
+        </a>
+
+        <button onclick="openTradeModal()"
+            class="h-9 px-3 text-xs rounded-xl bg-elevated text-white hover:bg-elevated/70 transition-colors flex items-center gap-1.5 font-medium">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            거래
+        </button>
+        <button onclick="openAccountModal()"
+            class="h-9 px-3 text-xs rounded-xl bg-elevated text-white hover:bg-elevated/70 transition-colors flex items-center gap-1.5 font-medium">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 10h18M7 15h2m4 0h4m-9 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+            계좌
+        </button>
+    </div>
+</div>
+
+<!-- ─────── Hero 합산 카드 ─────── -->
+<div class="hero-grad rounded-card p-5 lg:p-7 mb-5">
+    <div class="flex items-start justify-between mb-4 flex-wrap gap-4">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 min-w-0 flex-1">
+            <div>
+                <p class="text-[11px] text-muted uppercase tracking-wider">총 자산 <span class="text-muted/70">(KRW)</span></p>
+                <p id="hero-total" class="text-xl lg:text-2xl font-bold text-white mt-1 tabular-nums" data-money>—</p>
+            </div>
+            <div>
+                <p class="text-[11px] text-muted uppercase tracking-wider">총 원금 <span class="text-muted/70">(KRW)</span></p>
+                <p id="hero-cost" class="text-xl lg:text-2xl font-bold text-white mt-1 tabular-nums" data-money>—</p>
+            </div>
+            <div>
+                <p class="text-[11px] text-muted uppercase tracking-wider">평가손익 <span class="text-muted/70">(미실현)</span></p>
+                <p id="hero-pnl" class="text-xl lg:text-2xl font-bold tabular-nums mt-1" data-money>—</p>
+                <p id="hero-pnl-pct" class="text-[11px] tabular-nums">—</p>
+            </div>
+            <div>
+                <p class="text-[11px] text-muted uppercase tracking-wider">누적 실현 <span class="text-muted/70">(KRW)</span></p>
+                <p id="hero-realized" class="text-xl lg:text-2xl font-bold tabular-nums mt-1" data-money>—</p>
+                <p class="text-[11px] text-muted">매도 + 배당 누적</p>
+            </div>
+            <div class="col-span-2 lg:col-span-4">
+                <p id="hero-breakdown" class="text-xs text-muted">새로고침을 눌러주세요</p>
+            </div>
+        </div>
+        <div class="flex items-start gap-2 flex-wrap">
+            <!-- 환율 박스 -->
+            <div class="rounded-xl bg-elevated/50 border border-elevated px-3 py-2 flex items-center gap-2">
+                <div class="text-[11px]">
+                    <p class="text-muted uppercase tracking-wider">환율</p>
+                    <p class="text-white font-semibold tabular-nums">
+                        1 USD = ₩<span id="fx-display">—</span>
+                    </p>
+                </div>
+                <button onclick="openFxModal()" class="text-toss hover:text-white transition-colors p-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="rounded-xl bg-elevated/30 px-3 py-2 text-right">
+                <p class="text-[11px] text-muted uppercase tracking-wider">갱신</p>
+                <p id="hero-fetched" class="text-xs text-white font-medium mt-0.5">—</p>
+            </div>
+        </div>
+    </div>
+    <div id="summary-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+</div>
+
+{% if not accounts %}
+<!-- 계좌 없음 empty state -->
+<div class="bg-surface rounded-card p-10 text-center">
+    <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-elevated mb-4">
+        <svg class="w-7 h-7 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 10h18M7 15h2m4 0h4m-9 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+        </svg>
+    </div>
+    <h3 class="text-base font-semibold text-white mb-1">계좌가 없어요</h3>
+    <p class="text-sm text-muted mb-5">증권사/거래소 계좌를 추가해 거래를 기록해보세요.</p>
+    <button onclick="openAccountModal()" class="px-5 py-2.5 text-sm rounded-xl bg-toss text-white font-medium">계좌 추가</button>
+</div>
+{% else %}
+
+<!-- ─────── 계좌별 카드 ─────── -->
+<div id="acc-list" class="space-y-4 mb-5">
+{% for acc in accounts %}
+<div class="acc-card bg-surface rounded-card overflow-hidden" data-account-id="{{ acc.id }}">
+    <!-- 카드 헤더 -->
+    <div class="flex items-center justify-between p-4 lg:p-5 border-b border-elevated/60">
+        <div class="flex items-center gap-3 min-w-0">
+            <button class="drag-handle text-muted hover:text-white transition-colors shrink-0" title="드래그로 순서 변경">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+            </button>
+            <span class="text-[11px] font-semibold px-2 py-1 rounded-lg shrink-0 chip-{{ acc.broker }}">
+                {{ broker_options.get(acc.broker, acc.broker) }}
+            </span>
+            <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold text-white truncate">{{ acc.nickname }}</span>
+                    <span class="text-[11px] text-muted shrink-0">{{ account_type_options.get(acc.account_type, acc.account_type) }} · {{ acc.currency }}</span>
+                </div>
+                <div class="flex items-center gap-3 mt-1 text-xs">
+                    <span class="text-muted">평가</span>
+                    <span data-money class="text-white font-semibold tabular-nums" data-acc-eval="{{ acc.id }}">—</span>
+                    <span class="text-muted">·</span>
+                    <span class="text-muted">손익</span>
+                    <span data-money class="font-semibold tabular-nums" data-acc-pnl="{{ acc.id }}">—</span>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-1 shrink-0">
+            <button data-acc-id="{{ acc.id }}" data-acc-nick="{{ acc.nickname }}" onclick="openAccEditModal(+this.dataset.accId, this.dataset.accNick)"
+                title="별명 수정" class="text-xs text-muted hover:text-toss px-2 py-1 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                </svg>
+            </button>
+            <button onclick="deleteAccount({{ acc.id }})"
+                title="삭제" class="text-xs text-muted hover:text-[#F04452] px-2 py-1 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    {% set hs = holdings_by_account.get(acc.id, []) %}
+    {% if hs %}
+    <!-- 데스크탑 테이블 -->
+    <table class="w-full hidden lg:table">
+        <thead>
+            <tr class="text-[11px] text-muted uppercase tracking-wider">
+                <th class="text-left px-5 py-2.5 font-medium">종목</th>
+                <th class="text-right px-3 py-2.5 font-medium">수량</th>
+                <th class="text-right px-3 py-2.5 font-medium">평단</th>
+                <th class="text-right px-3 py-2.5 font-medium">취득금액</th>
+                <th class="text-right px-3 py-2.5 font-medium">현재가</th>
+                <th class="text-right px-3 py-2.5 font-medium">평가금액</th>
+                <th class="text-right px-3 py-2.5 font-medium">평가손익</th>
+                <th class="text-right px-3 py-2.5 font-medium">실현손익</th>
+                <th class="px-3 py-2.5"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for h in hs %}
+            <tr class="holding-row border-t border-elevated/40 transition-colors{% if h.is_hidden %} is-hidden-row{% endif %}"
+                data-holding="{{ h.id }}" data-ticker="{{ h.ticker }}" data-market="{{ h.market }}">
+                <td class="px-5 py-3">
+                    <div class="flex items-center gap-2">
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-sm font-semibold text-white">{{ h.ticker_name or h.ticker }}</span>
+                            <span class="text-[11px] text-muted">{{ h.ticker }}</span>
+                        </div>
+                        {% if h.is_hidden %}
+                        <span class="hidden-chip">
+                            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+                            숨김
+                        </span>
+                        {% endif %}
+                    </div>
+                </td>
+                <td class="px-3 py-3 text-right text-sm text-muted tabular-nums">{{ "{:g}".format(h.qty) }}</td>
+                <td class="px-3 py-3 text-right text-sm text-muted tabular-nums hide-strike" data-money>{{ "{:,.2f}".format(h.avg_cost) }}</td>
+                <td class="px-3 py-3 text-right text-sm text-muted tabular-nums hide-strike" data-money>{{ "{:,.0f}".format(h.avg_cost * h.qty) }}</td>
+                <td class="px-3 py-3 text-right text-sm text-white tabular-nums hide-strike" data-money data-cur>—</td>
+                <td class="px-3 py-3 text-right text-sm text-white font-medium tabular-nums hide-strike" data-money data-eval>—</td>
+                <td class="px-3 py-3 text-right text-sm tabular-nums hide-strike" data-money data-pnl>—</td>
+                <td class="px-3 py-3 text-right text-sm tabular-nums {% if h.realized_pnl > 0 %}text-[#F04452]{% elif h.realized_pnl < 0 %}text-toss{% else %}text-muted{% endif %}" data-money>
+                    {% if h.realized_pnl != 0 %}{{ "{:+,.0f}".format(h.realized_pnl) }}{% else %}—{% endif %}
+                </td>
+                <td class="px-3 py-3 text-right">
+                    <button onclick="toggleHidden({{ h.id }}, this)"
+                        class="row-action-btn {% if h.is_hidden %}active{% endif %}"
+                        title="{% if h.is_hidden %}집계에 다시 포함{% else %}집계에서 숨기기{% endif %}">
+                        {% if h.is_hidden %}
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+                        {% else %}
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                        {% endif %}
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- 모바일 카드 -->
+    <div class="lg:hidden divide-y divide-elevated/40">
+        {% for h in hs %}
+        <div class="px-4 py-3 holding-row{% if h.is_hidden %} is-hidden-row{% endif %}"
+            data-holding="{{ h.id }}" data-ticker="{{ h.ticker }}" data-market="{{ h.market }}">
+            <div class="flex items-center justify-between mb-2">
+                <div class="min-w-0 flex items-center gap-2">
+                    <div class="min-w-0">
+                        <p class="text-sm font-semibold text-white truncate">{{ h.ticker_name or h.ticker }}</p>
+                        <p class="text-[11px] text-muted">{{ h.ticker }} · {{ "{:g}".format(h.qty) }}주</p>
+                    </div>
+                    {% if h.is_hidden %}
+                    <span class="hidden-chip">숨김</span>
+                    {% endif %}
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <span class="text-sm font-semibold tabular-nums hide-strike" data-money data-pnl>—</span>
+                    <button onclick="toggleHidden({{ h.id }}, this)"
+                        class="row-action-btn active text-muted">
+                        {% if h.is_hidden %}
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+                        {% else %}
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                        {% endif %}
+                    </button>
+                </div>
+            </div>
+            <div class="grid grid-cols-4 gap-2 text-[11px]">
+                <div>
+                    <p class="text-muted">평단</p>
+                    <p class="text-white tabular-nums hide-strike" data-money>{{ "{:,.2f}".format(h.avg_cost) }}</p>
+                </div>
+                <div>
+                    <p class="text-muted">취득</p>
+                    <p class="text-white tabular-nums hide-strike" data-money>{{ "{:,.0f}".format(h.avg_cost * h.qty) }}</p>
+                </div>
+                <div>
+                    <p class="text-muted">현재가</p>
+                    <p class="text-white tabular-nums hide-strike" data-money data-cur>—</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-muted">평가</p>
+                    <p class="text-white tabular-nums hide-strike" data-money data-eval>—</p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-xs text-muted text-center py-6">보유 종목 없음</p>
+    {% endif %}
+
+    {% set closed = closed_by_account.get(acc.id, []) %}
+    {% if closed %}
+    <details class="border-t border-elevated/40">
+        <summary class="px-4 lg:px-5 py-3 cursor-pointer flex items-center justify-between text-xs text-muted hover:text-white transition-colors list-none">
+            <span class="flex items-center gap-2">
+                <svg class="w-3.5 h-3.5 transition-transform details-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+                닫힌 포지션 {{ closed|length }}개
+            </span>
+            {% set total_realized = closed | sum(attribute='realized_pnl') %}
+            <span class="tabular-nums {% if total_realized > 0 %}text-[#F04452]{% elif total_realized < 0 %}text-toss{% endif %}" data-money>
+                {{ "{:+,.0f}".format(total_realized) }}
+            </span>
+        </summary>
+        <div class="px-4 lg:px-5 pb-3">
+            <div class="space-y-1">
+                {% for h in closed %}
+                <div class="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-elevated/40 transition-colors{% if h.is_hidden %} is-hidden-row{% endif %}">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-sm text-white truncate">{{ h.ticker_name or h.ticker }}</span>
+                        <span class="text-[11px] text-muted">{{ h.ticker }}</span>
+                        {% if h.is_hidden %}
+                        <span class="hidden-chip">숨김</span>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center gap-3 shrink-0">
+                        <span class="text-xs font-semibold tabular-nums hide-strike {% if h.realized_pnl > 0 %}text-[#F04452]{% elif h.realized_pnl < 0 %}text-toss{% else %}text-muted{% endif %}" data-money>
+                            {{ "{:+,.0f}".format(h.realized_pnl) }}
+                        </span>
+                        <button onclick="toggleHidden({{ h.id }}, this)"
+                            class="row-action-btn active text-muted"
+                            title="{% if h.is_hidden %}집계에 다시 포함{% else %}집계에서 숨기기{% endif %}">
+                            {% if h.is_hidden %}
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+                            {% else %}
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                            {% endif %}
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </details>
+    {% endif %}
+</div>
+{% endfor %}
+</div>
+
+<!-- ─────── 거래 내역 ─────── -->
+<div class="bg-surface rounded-card overflow-hidden">
+    <div class="p-4 lg:p-5 border-b border-elevated/60">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div>
+                <h3 class="text-sm font-semibold text-white">거래 내역</h3>
+                <p class="text-[11px] text-muted mt-0.5">총 {{ trade_total }}건 · {{ trade_page }} / {{ trade_total_pages }} 페이지</p>
+            </div>
+            {% if trade_q or trade_side or trade_acc %}
+            <a href="/my" class="text-[11px] text-muted hover:text-white inline-flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                필터 초기화
+            </a>
+            {% endif %}
+        </div>
+        <form method="get" action="/my" class="flex items-center gap-2 flex-wrap">
+            <div class="relative flex-1 min-w-[160px]">
+                <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <input type="text" name="q" value="{{ trade_q }}" placeholder="종목명/티커 검색" class="my-input pl-9">
+            </div>
+            <select name="acc" class="my-input flex-1 min-w-[140px] max-w-[200px]">
+                <option value="">전체 계좌</option>
+                {% for a in accounts %}
+                <option value="{{ a.id }}" {% if trade_acc == a.id %}selected{% endif %}>{{ a.nickname }}</option>
+                {% endfor %}
+            </select>
+            <select name="side" class="my-input flex-1 min-w-[100px] max-w-[140px]">
+                <option value="">전체 구분</option>
+                <option value="buy" {% if trade_side == 'buy' %}selected{% endif %}>매수</option>
+                <option value="sell" {% if trade_side == 'sell' %}selected{% endif %}>매도</option>
+                <option value="dividend" {% if trade_side == 'dividend' %}selected{% endif %}>배당</option>
+            </select>
+            <button type="submit" class="px-4 py-2.5 rounded-xl bg-toss text-white text-sm font-semibold">검색</button>
+        </form>
+    </div>
+
+    {% if trades %}
+    <!-- 데스크탑 -->
+    <table class="w-full hidden lg:table">
+        <thead>
+            <tr class="text-[11px] text-muted uppercase tracking-wider">
+                <th class="text-left px-5 py-2.5 font-medium">시간</th>
+                <th class="text-left px-3 py-2.5 font-medium">계좌</th>
+                <th class="text-left px-3 py-2.5 font-medium">종목</th>
+                <th class="text-left px-3 py-2.5 font-medium">구분</th>
+                <th class="text-right px-3 py-2.5 font-medium">수량</th>
+                <th class="text-right px-3 py-2.5 font-medium">단가</th>
+                <th class="text-right px-3 py-2.5 font-medium">수수료</th>
+                <th class="text-right px-3 py-2.5 font-medium">세금</th>
+                <th class="text-right px-3 py-2.5 font-medium">실현손익</th>
+                <th class="px-5 py-2.5"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in trades %}
+            <tr class="border-t border-elevated/40 hover:bg-elevated/30 transition-colors">
+                <td class="px-5 py-3 text-xs text-muted tabular-nums">{{ t.executed_at.strftime("%m/%d %H:%M") }}</td>
+                <td class="px-3 py-3 text-xs text-muted">{{ account_map.get(t.account_id, {}).get('nickname', '') }}</td>
+                <td class="px-3 py-3 text-sm text-white">
+                    <span class="font-medium">{{ t.ticker_name or t.ticker }}</span>
+                    <span class="text-[11px] text-muted ml-1">{{ t.ticker }}</span>
+                </td>
+                <td class="px-3 py-3">
+                    {% if t.side == 'buy' %}
+                    <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-[#F04452]/10 text-[#F04452]">매수</span>
+                    {% elif t.side == 'sell' %}
+                    <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-toss/10 text-toss">매도</span>
+                    {% else %}
+                    <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-elevated text-muted">배당</span>
+                    {% endif %}
+                </td>
+                <td class="px-3 py-3 text-right text-sm text-muted tabular-nums">{{ "{:g}".format(t.qty) }}</td>
+                <td class="px-3 py-3 text-right text-sm text-white tabular-nums" data-money>{{ "{:,.0f}".format(t.price) }}</td>
+                <td class="px-3 py-3 text-right text-xs text-muted tabular-nums" data-money>{{ "{:,.0f}".format(t.fee) }}</td>
+                <td class="px-3 py-3 text-right text-xs text-muted tabular-nums" data-money>{{ "{:,.0f}".format(t.tax) }}</td>
+                <td class="px-3 py-3 text-right text-xs tabular-nums {% if t.realized_pnl > 0 %}text-[#F04452]{% elif t.realized_pnl < 0 %}text-toss{% else %}text-muted{% endif %}" data-money>
+                    {% if t.realized_pnl != 0 %}{{ "{:+,.0f}".format(t.realized_pnl) }}{% else %}—{% endif %}
+                </td>
+                <td class="px-5 py-3 text-right">
+                    <div class="inline-flex items-center gap-1">
+                        <button onclick="editTrade({{ t.id }})" title="수정"
+                            class="text-xs text-muted hover:text-toss transition-colors p-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                            </svg>
+                        </button>
+                        <button onclick="deleteTrade({{ t.id }})" title="삭제"
+                            class="text-xs text-muted hover:text-[#F04452] transition-colors p-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- 모바일 -->
+    <div class="lg:hidden divide-y divide-elevated/40">
+        {% for t in trades %}
+        <div class="px-4 py-3 flex items-center gap-3">
+            <div class="shrink-0">
+                {% if t.side == 'buy' %}
+                <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-[#F04452]/10 text-[#F04452]">매수</span>
+                {% elif t.side == 'sell' %}
+                <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-toss/10 text-toss">매도</span>
+                {% else %}
+                <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-elevated text-muted">배당</span>
+                {% endif %}
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-white truncate">{{ t.ticker_name or t.ticker }}</p>
+                <p class="text-[11px] text-muted">{{ t.executed_at.strftime("%m/%d %H:%M") }} · {{ "{:g}".format(t.qty) }}주 · <span data-money>{{ "{:,.0f}".format(t.price) }}</span></p>
+            </div>
+            <div class="text-right shrink-0">
+                {% if t.realized_pnl != 0 %}
+                <p class="text-xs font-semibold tabular-nums {% if t.realized_pnl > 0 %}text-[#F04452]{% else %}text-toss{% endif %}" data-money>{{ "{:+,.0f}".format(t.realized_pnl) }}</p>
+                {% endif %}
+                <div class="flex items-center gap-2 justify-end mt-0.5">
+                    <button onclick="editTrade({{ t.id }})" class="text-[11px] text-toss">수정</button>
+                    <button onclick="deleteTrade({{ t.id }})" class="text-[11px] text-muted">삭제</button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-xs text-muted text-center py-8">거래 내역 없음</p>
+    {% endif %}
+
+    {% if trade_total_pages > 1 %}
+    <div class="flex items-center justify-center gap-2 p-4 border-t border-elevated/40">
+        {% set base_qs = "&q=" ~ trade_q ~ "&acc=" ~ (trade_acc or '') ~ "&side=" ~ trade_side %}
+        {% if trade_page > 1 %}
+        <a href="?page={{ trade_page - 1 }}{{ base_qs }}" class="px-3 py-1.5 rounded-lg text-xs bg-elevated text-muted hover:text-white inline-flex items-center gap-1">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            이전
+        </a>
+        {% endif %}
+        <span class="text-xs text-muted px-2">{{ trade_page }} / {{ trade_total_pages }}</span>
+        {% if trade_page < trade_total_pages %}
+        <a href="?page={{ trade_page + 1 }}{{ base_qs }}" class="px-3 py-1.5 rounded-lg text-xs bg-elevated text-muted hover:text-white inline-flex items-center gap-1">
+            다음
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% endif %}
+
+
+<!-- ─────── 거래 모달 ─────── -->
+<div id="trade-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end lg:items-center justify-center p-0 lg:p-4"
+    onmousedown="_modalDown(event, this)" onclick="_modalClick(event, this, closeTradeModal)">
+    <div class="modal-in bg-surface rounded-t-3xl lg:rounded-card w-full max-w-md max-h-[92vh] overflow-y-auto scroll-area">
+        <div class="p-5 lg:p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h3 class="text-base font-bold text-white" id="t-modal-title">거래 추가</h3>
+                <button onclick="closeTradeModal()" class="text-muted hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <!-- Side segmented control -->
+            <div class="grid grid-cols-3 gap-1.5 p-1 bg-elevated rounded-xl mb-4" id="t-side-seg">
+                <button data-side="buy" class="seg-btn bg-[#F04452] text-white">매수</button>
+                <button data-side="sell" class="seg-btn text-muted hover:text-white">매도</button>
+                <button data-side="dividend" class="seg-btn text-muted hover:text-white">배당</button>
+            </div>
+            <input type="hidden" id="t-edit-id" value="">
+            <p id="t-edit-warn" class="hidden text-[11px] text-muted bg-elevated/40 rounded-xl px-3 py-2 mb-3">
+                ⓘ 수정 시 해당 종목의 평단/실현손익이 모든 거래 기준으로 재계산됩니다.
+            </p>
+
+            <div class="space-y-3.5">
+                <div>
+                    <label class="text-[11px] text-muted block mb-1.5 uppercase tracking-wider">계좌</label>
+                    <select id="t-account" class="my-input">
+                        {% for acc in accounts %}
+                        <option value="{{ acc.id }}" data-broker="{{ acc.broker }}" data-type="{{ acc.account_type }}" data-ccy="{{ acc.currency }}">
+                            {{ acc.nickname }} ({{ broker_options.get(acc.broker, acc.broker) }} · {{ account_type_options.get(acc.account_type, acc.account_type) }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-[11px] text-muted block mb-1.5 uppercase tracking-wider">종목</label>
+                    <div class="relative">
+                        <input type="text" id="t-search" autocomplete="off" placeholder="종목명 또는 코드 검색"
+                            class="my-input pl-9">
+                        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                        <div id="t-search-results" class="hidden absolute left-0 right-0 top-full mt-1 bg-surface rounded-xl shadow-2xl z-50 max-h-60 scroll-area border border-elevated"></div>
+                    </div>
+                    <div id="t-selected" class="hidden mt-2 px-3 py-2 rounded-xl bg-toss/10 border border-toss/20 flex items-center justify-between">
+                        <span class="text-xs text-toss font-medium" id="t-selected-text"></span>
+                        <button onclick="clearSelection()" class="text-toss/70 hover:text-toss">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[11px] text-muted block mb-1.5 uppercase tracking-wider">수량</label>
+                        <input type="number" step="any" id="t-qty" placeholder="0" class="my-input">
+                    </div>
+                    <div>
+                        <label class="text-[11px] text-muted block mb-1.5 uppercase tracking-wider">단가</label>
+                        <input type="number" step="any" id="t-price" placeholder="0" class="my-input">
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label class="text-[11px] text-muted uppercase tracking-wider">실행 시각</label>
+                        <button type="button" onclick="setExecNow()" class="text-[11px] text-toss hover:underline">지금</button>
+                    </div>
+                    <input type="datetime-local" id="t-executed-at" class="my-input">
+                </div>
+
+                <details class="rounded-xl bg-elevated/60 px-3 py-2 group">
+                    <summary class="text-xs text-muted cursor-pointer flex items-center justify-between list-none">
+                        <span>고급 옵션 (수수료/세금/메모)</span>
+                        <svg class="w-4 h-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </summary>
+                    <div class="mt-3 space-y-3 pb-1">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[11px] text-muted block mb-1.5">수수료 (자동)</label>
+                                <input type="number" step="any" id="t-fee" placeholder="자동" class="my-input">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-muted block mb-1.5">세금 (자동)</label>
+                                <input type="number" step="any" id="t-tax" placeholder="자동" class="my-input">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-[11px] text-muted block mb-1.5">메모</label>
+                            <input type="text" id="t-memo" placeholder="옵션" class="my-input">
+                        </div>
+                    </div>
+                </details>
+
+                <!-- 미리보기 박스 -->
+                <div id="t-preview" class="hidden rounded-xl bg-elevated/40 px-4 py-3 border border-elevated">
+                    <div class="flex items-center justify-between text-xs mb-1">
+                        <span class="text-muted">거래대금</span>
+                        <span id="t-preview-notional" class="text-white font-semibold tabular-nums">—</span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs mb-1">
+                        <span class="text-muted" id="t-preview-fee-label">수수료</span>
+                        <span id="t-preview-fee" class="text-muted tabular-nums">—</span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs" id="t-preview-tax-row">
+                        <span class="text-muted">거래세</span>
+                        <span id="t-preview-tax" class="text-muted tabular-nums">—</span>
+                    </div>
+                    <div class="border-t border-elevated/60 mt-2 pt-2 flex items-center justify-between text-sm">
+                        <span class="text-muted">정산금</span>
+                        <span id="t-preview-net" class="text-white font-bold tabular-nums">—</span>
+                    </div>
+                </div>
+
+                <p id="t-error" class="text-xs text-[#F04452] hidden"></p>
+
+                <div class="flex gap-2 pt-2">
+                    <button onclick="closeTradeModal()" class="flex-1 py-3 rounded-xl text-sm bg-elevated text-muted font-medium hover:text-white transition-colors">취소</button>
+                    <button id="t-submit" onclick="submitTrade()" class="flex-1 py-3 rounded-xl text-sm bg-[#F04452] text-white font-bold transition-colors">매수하기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ─────── 환율 모달 ─────── -->
+<div id="fx-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end lg:items-center justify-center p-0 lg:p-4"
+    onmousedown="_modalDown(event, this)" onclick="_modalClick(event, this, closeFxModal)">
+    <div class="modal-in bg-surface rounded-t-3xl lg:rounded-card w-full max-w-sm">
+        <div class="p-5 lg:p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h3 class="text-base font-bold text-white">환율 설정</h3>
+                <button onclick="closeFxModal()" class="text-muted hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <p class="text-xs text-muted mb-4">USD/USDT → KRW 환산에 사용됩니다. 값은 브라우저에 저장됩니다.</p>
+            <div class="space-y-3">
+                <div>
+                    <label class="text-[11px] text-muted block mb-1.5 uppercase tracking-wider">1 USD = ₩</label>
+                    <input type="number" step="any" id="fx-usd-input" placeholder="예: 1380" class="my-input">
+                </div>
+                <div>
+                    <label class="text-[11px] text-muted block mb-1.5 uppercase tracking-wider">1 USDT = ₩</label>
+                    <input type="number" step="any" id="fx-usdt-input" placeholder="비우면 USD와 동일" class="my-input">
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button onclick="closeFxModal()" class="flex-1 py-3 rounded-xl text-sm bg-elevated text-muted font-medium">취소</button>
+                    <button onclick="saveFx()" class="flex-1 py-3 rounded-xl text-sm bg-toss text-white font-bold">저장</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ─────── 계좌 별명 수정 모달 ─────── -->
+<div id="acc-edit-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end lg:items-center justify-center p-0 lg:p-4"
+    onmousedown="_modalDown(event, this)" onclick="_modalClick(event, this, closeAccEditModal)">
+    <div class="modal-in bg-surface rounded-t-3xl lg:rounded-card w-full max-w-sm">
+        <div class="p-5 lg:p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h3 class="text-base font-bold text-white">계좌 별명 수정</h3>
+                <button onclick="closeAccEditModal()" class="text-muted hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <input type="hidden" id="acc-edit-id">
+            <div class="space-y-3">
+                <div>
+                    <label class="text-[11px] text-muted block mb-1.5 uppercase tracking-wider">별명</label>
+                    <input type="text" id="acc-edit-nickname" class="my-input">
+                </div>
+                <p id="acc-edit-error" class="text-xs text-[#F04452] hidden"></p>
+                <div class="flex gap-2 pt-2">
+                    <button onclick="closeAccEditModal()" class="flex-1 py-3 rounded-xl text-sm bg-elevated text-muted font-medium">취소</button>
+                    <button onclick="saveAccEdit()" class="flex-1 py-3 rounded-xl text-sm bg-toss text-white font-bold">저장</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ─────── 계좌 모달 ─────── -->
+<div id="account-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end lg:items-center justify-center p-0 lg:p-4"
+    onmousedown="_modalDown(event, this)" onclick="_modalClick(event, this, closeAccountModal)">
+    <div class="modal-in bg-surface rounded-t-3xl lg:rounded-card w-full max-w-md">
+        <div class="p-5 lg:p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h3 class="text-base font-bold text-white">계좌 추가</h3>
+                <button onclick="closeAccountModal()" class="text-muted hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <div class="space-y-3.5">
+                <div>
+                    <label class="text-[11px] text-muted block mb-1.5 uppercase tracking-wider">증권사 / 거래소</label>
+                    <select id="a-broker" class="my-input">
+                        {% for k, v in broker_options.items() %}
+                        <option value="{{ k }}">{{ v }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[11px] text-muted block mb-1.5 uppercase tracking-wider">계좌 유형</label>
+                    <select id="a-type" class="my-input">
+                        {% for k, v in account_type_options.items() %}
+                        <option value="{{ k }}">{{ v }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[11px] text-muted block mb-1.5 uppercase tracking-wider">통화</label>
+                    <select id="a-currency" class="my-input">
+                        <option value="KRW">KRW</option>
+                        <option value="USD">USD</option>
+                        <option value="USDT">USDT</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[11px] text-muted block mb-1.5 uppercase tracking-wider">별명 (선택)</label>
+                    <input type="text" id="a-nickname" placeholder="예: 토스 일반계좌" class="my-input">
+                </div>
+                <p id="a-error" class="text-xs text-[#F04452] hidden"></p>
+
+                <div class="flex gap-2 pt-2">
+                    <button onclick="closeAccountModal()" class="flex-1 py-3 rounded-xl text-sm bg-elevated text-muted font-medium">취소</button>
+                    <button onclick="submitAccount()" class="flex-1 py-3 rounded-xl text-sm bg-toss text-white font-bold">추가</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+// ───────── 모달 backdrop 닫기 (mousedown 시작점 검증) ─────────
+// input 안에서 드래그 시작 후 모달 밖에서 mouseup 되어도 닫히지 않도록.
+function _modalDown(e, overlay) { overlay.dataset.downOnSelf = (e.target === overlay) ? '1' : '0'; }
+function _modalClick(e, overlay, closeFn) {
+    var down = overlay.dataset.downOnSelf === '1';
+    overlay.dataset.downOnSelf = '0';
+    if (down && e.target === overlay) closeFn();
+}
+
+// ───────── 환율 (localStorage) ─────────
+function getFx() {
+    return {
+        usd: parseFloat(localStorage.getItem('my_fx_usd')) || 0,
+        usdt: parseFloat(localStorage.getItem('my_fx_usdt')) || parseFloat(localStorage.getItem('my_fx_usd')) || 0,
+    };
+}
+function fxToKrw(amount, ccy) {
+    var fx = getFx();
+    if (ccy === 'KRW') return amount;
+    if (ccy === 'USD') return amount * (fx.usd || 0);
+    if (ccy === 'USDT') return amount * (fx.usdt || fx.usd || 0);
+    return 0;
+}
+function renderFx() {
+    var fx = getFx();
+    document.getElementById('fx-display').textContent = fx.usd ? fx.usd.toLocaleString('ko-KR') : '미설정';
+}
+function openFxModal() {
+    var fx = getFx();
+    document.getElementById('fx-usd-input').value = fx.usd || '';
+    var sameAsUsd = !localStorage.getItem('my_fx_usdt') ||
+        parseFloat(localStorage.getItem('my_fx_usdt')) === parseFloat(localStorage.getItem('my_fx_usd'));
+    document.getElementById('fx-usdt-input').value = sameAsUsd ? '' : (fx.usdt || '');
+    document.getElementById('fx-modal').classList.remove('hidden');
+}
+function closeFxModal() {
+    document.getElementById('fx-modal').classList.add('hidden');
+}
+function saveFx() {
+    var usd = parseFloat(document.getElementById('fx-usd-input').value);
+    var usdt = parseFloat(document.getElementById('fx-usdt-input').value);
+    if (!usd || usd <= 0) { alert('USD 환율을 입력해주세요'); return; }
+    localStorage.setItem('my_fx_usd', String(usd));
+    if (usdt && usdt > 0) localStorage.setItem('my_fx_usdt', String(usdt));
+    else localStorage.removeItem('my_fx_usdt');
+    renderFx();
+    closeFxModal();
+    // 캐시된 마지막 데이터 다시 적용 (없으면 그냥 새로고침)
+    if (lastRefreshData) applyRefresh(lastRefreshData);
+}
+
+// ───────── 숨기기 ─────────
+var masked = localStorage.getItem('my_masked') === '1';
+
+function fmtMoney(n) {
+    if (n === null || n === undefined || isNaN(n)) return '—';
+    var sign = n < 0 ? '-' : '';
+    var v = Math.abs(n);
+    if (v >= 10000) return sign + v.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+    if (v >= 1) return sign + v.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+    return sign + v.toFixed(4);
+}
+
+function applyMask() {
+    document.querySelectorAll('[data-money]').forEach(function(el) {
+        if (masked) {
+            if (!el.dataset.real) el.dataset.real = el.textContent;
+            el.textContent = '••••••';
+        } else {
+            if (el.dataset.real) {
+                el.textContent = el.dataset.real;
+                delete el.dataset.real;
+            }
+        }
+    });
+    document.getElementById('mask-icon-show').classList.toggle('hidden', masked);
+    document.getElementById('mask-icon-hide').classList.toggle('hidden', !masked);
+    document.getElementById('mask-label').textContent = masked ? '보이기' : '숨기기';
+}
+function toggleMask() {
+    masked = !masked;
+    localStorage.setItem('my_masked', masked ? '1' : '0');
+    applyMask();
+}
+
+// ───────── 새로고침 ─────────
+var refreshing = false;
+var liveTimer = null;
+var liveCountdown = 0;
+var LIVE_INTERVAL = 5;  // 초
+var lastPrices = {};
+var lastRefreshData = null;
+
+function setText(el, text, flashKey) {
+    if (!el) return;
+    var old = el.dataset.real || el.textContent;
+    if (masked) {
+        el.dataset.real = text;
+        el.textContent = '••••••';
+    } else {
+        el.textContent = text;
+    }
+    // flash 효과 (가격 변동 시)
+    if (flashKey && lastPrices[flashKey] !== undefined) {
+        var prev = lastPrices[flashKey];
+        var newVal = parseFloat((text + '').replace(/,/g, ''));
+        if (!isNaN(newVal) && !isNaN(prev) && newVal !== prev) {
+            el.classList.remove('flash-up', 'flash-down');
+            void el.offsetWidth;
+            el.classList.add(newVal > prev ? 'flash-up' : 'flash-down');
+        }
+    }
+}
+
+function applyRefresh(data) {
+    lastRefreshData = data;
+    document.querySelectorAll('[data-holding]').forEach(function(row) {
+        var ticker = row.dataset.ticker;
+        var market = row.dataset.market;
+        var accId = row.closest('[data-account-id]') ? +row.closest('[data-account-id]').dataset.accountId : null;
+        var match = data.holdings.find(function(h) {
+            return h.ticker === ticker && h.market === market && h.account_id === accId;
+        });
+        if (!match) return;
+
+        var flashKey = ticker + ':' + accId;
+        setText(row.querySelector('[data-cur]'), fmtMoney(match.current_price), flashKey);
+        setText(row.querySelector('[data-eval]'), fmtMoney(match.eval_amount));
+
+        var pnlEl = row.querySelector('[data-pnl]');
+        if (pnlEl) {
+            var pnlText = (match.unrealized_pnl >= 0 ? '+' : '') + fmtMoney(match.unrealized_pnl) +
+                ' (' + (match.unrealized_pct >= 0 ? '+' : '') + match.unrealized_pct.toFixed(2) + '%)';
+            setText(pnlEl, pnlText);
+            // 색상 클래스 — 데스크탑/모바일 모두 처리
+            pnlEl.classList.remove('text-[#F04452]', 'text-toss', 'text-muted');
+            pnlEl.classList.add(match.unrealized_pnl >= 0 ? 'text-[#F04452]' : 'text-toss');
+        }
+        lastPrices[flashKey] = match.current_price;
+    });
+
+    Object.keys(data.by_account).forEach(function(accId) {
+        var agg = data.by_account[accId];
+        var evalEl = document.querySelector('[data-acc-eval="' + accId + '"]');
+        var pnlEl = document.querySelector('[data-acc-pnl="' + accId + '"]');
+        if (evalEl) setText(evalEl, fmtMoney(agg.eval));
+        if (pnlEl) {
+            var pct = agg.cost > 0 ? (agg.unrealized / agg.cost * 100) : 0;
+            setText(pnlEl, (agg.unrealized >= 0 ? '+' : '') + fmtMoney(agg.unrealized) +
+                ' (' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%)');
+            pnlEl.classList.remove('text-[#F04452]', 'text-toss');
+            pnlEl.classList.add(agg.unrealized >= 0 ? 'text-[#F04452]' : 'text-toss');
+        }
+    });
+
+    // Hero 통화별 카드
+    var sum = document.getElementById('summary-cards');
+    sum.innerHTML = '';
+    var currencies = Object.keys(data.by_currency);
+    var heroTotal = document.getElementById('hero-total');
+    var heroCost = document.getElementById('hero-cost');
+    var heroPnl = document.getElementById('hero-pnl');
+    var heroPnlPct = document.getElementById('hero-pnl-pct');
+    var heroRealized = document.getElementById('hero-realized');
+    var heroBreak = document.getElementById('hero-breakdown');
+
+    if (currencies.length === 0) {
+        setText(heroTotal, '—');
+        setText(heroCost, '—');
+        setText(heroPnl, '—');
+        setText(heroPnlPct, '—');
+        setText(heroRealized, '—');
+        heroBreak.textContent = '보유 종목 없음';
+    } else {
+        var totalKrw = 0, totalCostKrw = 0, totalRealizedKrw = 0;
+        var hasUnsetFx = false;
+        currencies.forEach(function(c) {
+            if (c !== 'KRW' && !getFx().usd) hasUnsetFx = true;
+            totalKrw += fxToKrw(data.by_currency[c].eval, c);
+            totalCostKrw += fxToKrw(data.by_currency[c].cost, c);
+            totalRealizedKrw += fxToKrw(data.by_currency[c].realized, c);
+        });
+        var pnlKrw = totalKrw - totalCostKrw;
+        var pnlPct = totalCostKrw > 0 ? (pnlKrw / totalCostKrw * 100) : 0;
+
+        setText(heroTotal, '₩' + fmtMoney(totalKrw));
+        setText(heroCost, '₩' + fmtMoney(totalCostKrw));
+
+        var pnlText = (pnlKrw >= 0 ? '+₩' : '-₩') + fmtMoney(Math.abs(pnlKrw));
+        setText(heroPnl, pnlText);
+        setText(heroPnlPct, (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%');
+        var pnlColor = pnlKrw === 0 ? 'text-muted' : (pnlKrw > 0 ? 'text-[#F04452]' : 'text-toss');
+        heroPnl.classList.remove('text-[#F04452]', 'text-toss', 'text-muted', 'text-white');
+        heroPnl.classList.add(pnlKrw === 0 ? 'text-white' : pnlColor);
+        heroPnlPct.classList.remove('text-[#F04452]', 'text-toss', 'text-muted');
+        heroPnlPct.classList.add(pnlColor);
+
+        var realizedText = (totalRealizedKrw >= 0 ? '+₩' : '-₩') + fmtMoney(Math.abs(totalRealizedKrw));
+        setText(heroRealized, realizedText);
+        var realColor = totalRealizedKrw === 0 ? 'text-white' : (totalRealizedKrw > 0 ? 'text-[#F04452]' : 'text-toss');
+        heroRealized.classList.remove('text-[#F04452]', 'text-toss', 'text-white');
+        heroRealized.classList.add(realColor);
+
+        var breakLine = currencies.map(function(c) {
+            return c + ' ' + fmtMoney(data.by_currency[c].eval);
+        }).join('  ·  ');
+        if (hasUnsetFx) breakLine += '  ·  ⓘ 환율 미설정';
+        if (masked) {
+            heroBreak.dataset.real = breakLine;
+            heroBreak.textContent = '••••••';
+        } else {
+            heroBreak.textContent = breakLine;
+            delete heroBreak.dataset.real;
+        }
+        heroBreak.setAttribute('data-money', '');
+    }
+
+    currencies.forEach(function(ccy) {
+        var c = data.by_currency[ccy];
+        var pct = c.cost > 0 ? (c.unrealized / c.cost * 100) : 0;
+        var pnlColor = c.unrealized >= 0 ? '#F04452' : '#3182F6';
+        var card = document.createElement('div');
+        card.className = 'rounded-xl bg-elevated/40 border border-elevated/60 p-4';
+        var evalText = fmtMoney(c.eval);
+        var pnlText = (c.unrealized >= 0 ? '+' : '') + fmtMoney(c.unrealized);
+        var pctText = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+        var realText = (c.realized >= 0 ? '+' : '') + fmtMoney(c.realized);
+        card.innerHTML =
+            '<div class="flex items-center justify-between mb-2">' +
+                '<span class="text-[11px] text-muted uppercase tracking-wider">' + ccy + '</span>' +
+                '<span class="text-[11px] font-semibold tabular-nums" style="color:' + pnlColor + '">' + pctText + '</span>' +
+            '</div>' +
+            '<p class="text-lg font-bold text-white tabular-nums" data-money>' + evalText + '</p>' +
+            '<div class="flex items-center justify-between mt-2 text-[11px]">' +
+                '<span class="text-muted">평가손익</span>' +
+                '<span class="font-semibold tabular-nums" style="color:' + pnlColor + '" data-money>' + pnlText + '</span>' +
+            '</div>' +
+            '<div class="flex items-center justify-between text-[11px]">' +
+                '<span class="text-muted">실현손익</span>' +
+                '<span class="text-muted tabular-nums" data-money>' + realText + '</span>' +
+            '</div>';
+        sum.appendChild(card);
+    });
+
+    document.getElementById('hero-fetched').textContent = data.fetched_at || '—';
+    if (masked) applyMask();
+}
+
+function refreshNow() {
+    if (refreshing) return;
+    refreshing = true;
+    var icon = document.getElementById('refresh-icon');
+    icon.classList.add('spin');
+    fetch('/api/my/refresh')
+        .then(function(r) { return r.json(); })
+        .then(function(data) { if (data && data.holdings) applyRefresh(data); })
+        .catch(function(e) { console.error(e); })
+        .finally(function() {
+            refreshing = false;
+            setTimeout(function() { icon.classList.remove('spin'); }, 300);
+        });
+}
+
+function _setLiveLabel() {
+    document.getElementById('live-label').textContent =
+        '실시간 · ' + liveCountdown + '초 후 갱신';
+}
+
+function toggleLive() {
+    var label = document.getElementById('live-label');
+    var btn = document.getElementById('live-btn');
+    var dot = document.getElementById('live-dot');
+    if (liveTimer) {
+        clearInterval(liveTimer);
+        liveTimer = null;
+        liveCountdown = 0;
+        label.textContent = '실시간 OFF';
+        dot.classList.remove('bg-[#F04452]', 'live-dot');
+        dot.classList.add('bg-muted');
+        btn.classList.remove('bg-toss/15', 'text-toss');
+        btn.classList.add('bg-elevated', 'text-muted');
+    } else {
+        refreshNow();
+        liveCountdown = LIVE_INTERVAL;
+        _setLiveLabel();
+        liveTimer = setInterval(function() {
+            liveCountdown -= 1;
+            if (liveCountdown <= 0) {
+                refreshNow();
+                liveCountdown = LIVE_INTERVAL;
+            }
+            _setLiveLabel();
+        }, 1000);
+        dot.classList.remove('bg-muted');
+        dot.classList.add('bg-[#F04452]', 'live-dot');
+        btn.classList.remove('bg-elevated', 'text-muted');
+        btn.classList.add('bg-toss/15', 'text-toss');
+    }
+}
+
+// ───────── 거래 모달 ─────────
+var tSelected = null;
+var tSearchTimer = null;
+var tCurrentSide = 'buy';
+
+function _nowLocalISO() {
+    var d = new Date();
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+function setExecNow() {
+    document.getElementById('t-executed-at').value = _nowLocalISO();
+}
+
+function openTradeModal() {
+    var sel = document.getElementById('t-account');
+    if (!sel || sel.options.length === 0) {
+        alert('계좌부터 추가해주세요');
+        return;
+    }
+    document.getElementById('t-modal-title').textContent = '거래 추가';
+    document.getElementById('t-edit-id').value = '';
+    document.getElementById('t-edit-warn').classList.add('hidden');
+    document.getElementById('t-executed-at').value = _nowLocalISO();
+    document.getElementById('trade-modal').classList.remove('hidden');
+    setTimeout(function() { document.getElementById('t-search').focus(); }, 50);
+}
+function closeTradeModal() {
+    document.getElementById('trade-modal').classList.add('hidden');
+    document.getElementById('t-search').value = '';
+    document.getElementById('t-qty').value = '';
+    document.getElementById('t-price').value = '';
+    document.getElementById('t-fee').value = '';
+    document.getElementById('t-tax').value = '';
+    document.getElementById('t-memo').value = '';
+    document.getElementById('t-executed-at').value = '';
+    document.getElementById('t-selected').classList.add('hidden');
+    document.getElementById('t-preview').classList.add('hidden');
+    document.getElementById('t-error').classList.add('hidden');
+    document.getElementById('t-edit-id').value = '';
+    document.getElementById('t-edit-warn').classList.add('hidden');
+    document.getElementById('t-modal-title').textContent = '거래 추가';
+    tSelected = null;
+    setSide('buy');
+}
+
+function editTrade(id) {
+    fetch('/api/my/trades/' + id)
+        .then(function(r) { return r.json(); })
+        .then(function(t) {
+            if (!t || t.error) { alert('거래를 불러올 수 없습니다'); return; }
+
+            // 폼 채우기
+            tSelected = { ticker: t.ticker, name: t.ticker_name || t.ticker, market: t.market };
+            document.getElementById('t-edit-id').value = t.id;
+            document.getElementById('t-modal-title').textContent = '거래 수정';
+            document.getElementById('t-edit-warn').classList.remove('hidden');
+
+            // 계좌 select
+            var accSel = document.getElementById('t-account');
+            for (var i = 0; i < accSel.options.length; i++) {
+                if (+accSel.options[i].value === t.account_id) { accSel.selectedIndex = i; break; }
+            }
+
+            document.getElementById('t-search').value = (t.ticker_name || t.ticker);
+            document.getElementById('t-selected-text').textContent = (t.ticker_name || t.ticker) + '  ·  ' + t.ticker;
+            document.getElementById('t-selected').classList.remove('hidden');
+
+            document.getElementById('t-qty').value = t.qty;
+            document.getElementById('t-price').value = t.price;
+            document.getElementById('t-fee').value = t.fee;
+            document.getElementById('t-tax').value = t.tax;
+            document.getElementById('t-memo').value = t.memo || '';
+            document.getElementById('t-executed-at').value = t.executed_at || '';
+
+            setSide(t.side);
+            document.getElementById('trade-modal').classList.remove('hidden');
+            updateFeePreview();
+        })
+        .catch(function() { alert('거래 조회 실패'); });
+}
+function clearSelection() {
+    tSelected = null;
+    document.getElementById('t-search').value = '';
+    document.getElementById('t-selected').classList.add('hidden');
+    document.getElementById('t-preview').classList.add('hidden');
+}
+
+function setSide(side) {
+    tCurrentSide = side;
+    var seg = document.getElementById('t-side-seg');
+    seg.querySelectorAll('button').forEach(function(b) {
+        b.classList.remove('bg-[#F04452]', 'bg-toss', 'bg-elevated', 'text-white');
+        b.classList.add('text-muted');
+    });
+    var active = seg.querySelector('[data-side="' + side + '"]');
+    active.classList.remove('text-muted');
+    active.classList.add('text-white');
+    if (side === 'buy') active.classList.add('bg-[#F04452]');
+    else if (side === 'sell') active.classList.add('bg-toss');
+    else active.classList.add('bg-elevated');
+
+    var submit = document.getElementById('t-submit');
+    submit.classList.remove('bg-[#F04452]', 'bg-toss', 'bg-elevated');
+    var isEdit = !!document.getElementById('t-edit-id').value;
+    if (side === 'buy') { submit.classList.add('bg-[#F04452]'); submit.textContent = isEdit ? '저장하기' : '매수하기'; }
+    else if (side === 'sell') { submit.classList.add('bg-toss'); submit.textContent = isEdit ? '저장하기' : '매도하기'; }
+    else { submit.classList.add('bg-elevated'); submit.textContent = isEdit ? '저장하기' : '배당 추가'; }
+
+    updateFeePreview();
+}
+
+document.querySelectorAll('#t-side-seg [data-side]').forEach(function(b) {
+    b.addEventListener('click', function() { setSide(b.dataset.side); });
+});
+
+function _accountTypeToMarket(type) {
+    if (type === 'crypto') return 'crypto';
+    if (type === 'regular_oversea') return 'us_stock';
+    return 'kr_stock';
+}
+
+document.getElementById('t-search').addEventListener('input', function(e) {
+    var q = e.target.value.trim();
+    var selOpt = document.getElementById('t-account').selectedOptions[0];
+    var market = selOpt ? _accountTypeToMarket(selOpt.dataset.type) : '';
+    tSelected = null;
+
+    if (tSearchTimer) clearTimeout(tSearchTimer);
+    var sr = document.getElementById('t-search-results');
+    if (q.length < 1) {
+        sr.classList.add('hidden');
+        return;
+    }
+    sr.innerHTML = '<div class="p-3 text-xs text-muted flex items-center gap-2"><div class="w-3 h-3 border border-toss/30 border-t-toss rounded-full spin"></div>검색 중...</div>';
+    sr.classList.remove('hidden');
+
+    tSearchTimer = setTimeout(function() {
+        fetch('/api/ticker/search?market=' + market + '&q=' + encodeURIComponent(q))
+            .then(function(r) { return r.json(); })
+            .then(function(results) {
+                if (!results.length) {
+                    sr.innerHTML = '<div class="p-3 text-xs text-muted">검색 결과 없음</div>';
+                    return;
+                }
+                sr.innerHTML = results.map(function(it) {
+                    return '<div class="px-4 py-2.5 hover:bg-elevated cursor-pointer flex items-center justify-between transition-colors" ' +
+                        'data-t="' + it.ticker + '" data-n="' + (it.name || '').replace(/"/g, '&quot;') + '" data-m="' + it.market + '">' +
+                        '<span class="text-sm text-white">' + (it.name || it.ticker) + '</span>' +
+                        '<span class="text-[11px] text-muted">' + it.ticker + '</span>' +
+                        '</div>';
+                }).join('');
+                sr.querySelectorAll('div[data-t]').forEach(function(el) {
+                    el.onclick = function() { selectTicker(el.dataset.t, el.dataset.n, el.dataset.m); };
+                });
+            });
+    }, 250);
+});
+
+function selectTicker(ticker, name, market) {
+    tSelected = { ticker: ticker, name: name, market: market };
+    document.getElementById('t-search').value = (name || ticker);
+    document.getElementById('t-search-results').classList.add('hidden');
+    document.getElementById('t-selected-text').textContent = (name || ticker) + '  ·  ' + ticker;
+    document.getElementById('t-selected').classList.remove('hidden');
+    updateFeePreview();
+}
+
+['t-account', 't-qty', 't-price', 't-fee', 't-tax'].forEach(function(id) {
+    document.getElementById(id).addEventListener('input', updateFeePreview);
+});
+
+function updateFeePreview() {
+    var qty = parseFloat(document.getElementById('t-qty').value);
+    var price = parseFloat(document.getElementById('t-price').value);
+    var preview = document.getElementById('t-preview');
+
+    if (!qty || !price) { preview.classList.add('hidden'); return; }
+
+    var notional = qty * price;
+    var feeManual = document.getElementById('t-fee').value;
+    var taxManual = document.getElementById('t-tax').value;
+    var accId = document.getElementById('t-account').value;
+
+    document.getElementById('t-preview-notional').textContent = fmtMoney(notional);
+    preview.classList.remove('hidden');
+
+    document.getElementById('t-preview-fee-label').textContent = tCurrentSide === 'buy' ? '매수 수수료' : (tCurrentSide === 'sell' ? '매도 수수료' : '수수료');
+    document.getElementById('t-preview-tax-row').style.display = tCurrentSide === 'sell' ? '' : 'none';
+
+    if (feeManual !== '' && (taxManual !== '' || tCurrentSide !== 'sell')) {
+        var fee = parseFloat(feeManual) || 0;
+        var tax = tCurrentSide === 'sell' ? (parseFloat(taxManual) || 0) : 0;
+        document.getElementById('t-preview-fee').textContent = fmtMoney(fee);
+        document.getElementById('t-preview-tax').textContent = fmtMoney(tax);
+        var net = tCurrentSide === 'sell' ? notional - fee - tax : notional + fee;
+        document.getElementById('t-preview-net').textContent = fmtMoney(net);
+        return;
+    }
+
+    fetch('/api/my/fee-preview?account_id=' + accId + '&side=' + tCurrentSide + '&price=' + price + '&qty=' + qty)
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (!d || d.error) return;
+            document.getElementById('t-preview-fee').textContent = fmtMoney(d.fee || 0);
+            document.getElementById('t-preview-tax').textContent = fmtMoney(d.tax || 0);
+            var net = tCurrentSide === 'sell' ? notional - (d.fee || 0) - (d.tax || 0) : notional + (d.fee || 0);
+            document.getElementById('t-preview-net').textContent = fmtMoney(net);
+        });
+}
+
+function submitTrade() {
+    var err = document.getElementById('t-error');
+    err.classList.add('hidden');
+    if (!tSelected) {
+        err.textContent = '종목을 선택해주세요';
+        err.classList.remove('hidden');
+        return;
+    }
+    var qty = parseFloat(document.getElementById('t-qty').value);
+    var price = parseFloat(document.getElementById('t-price').value);
+    if (!qty || qty <= 0) {
+        err.textContent = '수량을 입력해주세요';
+        err.classList.remove('hidden');
+        return;
+    }
+    if (tCurrentSide !== 'dividend' && (!price || price <= 0)) {
+        err.textContent = '단가를 입력해주세요';
+        err.classList.remove('hidden');
+        return;
+    }
+    var feeRaw = document.getElementById('t-fee').value;
+    var taxRaw = document.getElementById('t-tax').value;
+    var execAt = document.getElementById('t-executed-at').value;
+
+    var body = {
+        account_id: parseInt(document.getElementById('t-account').value),
+        ticker: tSelected.ticker,
+        ticker_name: tSelected.name,
+        side: tCurrentSide,
+        qty: qty,
+        price: price || 0,
+        memo: document.getElementById('t-memo').value,
+    };
+    if (feeRaw !== '') body.fee = parseFloat(feeRaw);
+    if (taxRaw !== '') body.tax = parseFloat(taxRaw);
+    if (execAt) body.executed_at = execAt;
+
+    var btn = document.getElementById('t-submit');
+    btn.disabled = true; btn.style.opacity = 0.6;
+
+    var editId = document.getElementById('t-edit-id').value;
+    var url = editId ? ('/api/my/trades/' + editId) : '/api/my/trades';
+    var method = editId ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(res) {
+        if (res.ok) {
+            location.reload();
+        } else {
+            err.textContent = res.data.error || '실패';
+            err.classList.remove('hidden');
+            btn.disabled = false; btn.style.opacity = 1;
+        }
+    }).catch(function() {
+        err.textContent = '네트워크 오류';
+        err.classList.remove('hidden');
+        btn.disabled = false; btn.style.opacity = 1;
+    });
+}
+
+function deleteTrade(id) {
+    if (!confirm('이 거래를 삭제하시겠습니까? (해당 종목 평단/실현손익 재계산됩니다)')) return;
+    fetch('/api/my/trades/' + id, { method: 'DELETE' })
+        .then(function(r) { if (r.ok) location.reload(); });
+}
+
+// ───────── 계좌 모달 ─────────
+function openAccountModal() {
+    document.getElementById('account-modal').classList.remove('hidden');
+}
+function closeAccountModal() {
+    document.getElementById('account-modal').classList.add('hidden');
+    document.getElementById('a-nickname').value = '';
+    document.getElementById('a-error').classList.add('hidden');
+}
+function submitAccount() {
+    var err = document.getElementById('a-error');
+    err.classList.add('hidden');
+    var body = {
+        broker: document.getElementById('a-broker').value,
+        account_type: document.getElementById('a-type').value,
+        currency: document.getElementById('a-currency').value,
+        nickname: document.getElementById('a-nickname').value,
+    };
+    fetch('/api/my/accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(res) {
+        if (res.ok) location.reload();
+        else { err.textContent = res.data.error || '실패'; err.classList.remove('hidden'); }
+    });
+}
+function deleteAccount(id) {
+    if (!confirm('계좌 + 보유종목 + 거래내역이 모두 삭제됩니다. 진행하시겠습니까?')) return;
+    fetch('/api/my/accounts/' + id, { method: 'DELETE' })
+        .then(function(r) { if (r.ok) location.reload(); });
+}
+
+function toggleHidden(id, btn) {
+    btn.disabled = true;
+    fetch('/api/my/holdings/' + id + '/toggle-hidden', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            btn.disabled = false;
+            if (d && d.status === 'ok') {
+                // 페이지 새로고침해서 모든 집계 / 시각화 일관 적용
+                location.reload();
+            }
+        })
+        .catch(function() { btn.disabled = false; });
+}
+
+function openAccEditModal(id, currentNickname) {
+    document.getElementById('acc-edit-id').value = id;
+    document.getElementById('acc-edit-nickname').value = currentNickname || '';
+    document.getElementById('acc-edit-error').classList.add('hidden');
+    document.getElementById('acc-edit-modal').classList.remove('hidden');
+    setTimeout(function() { document.getElementById('acc-edit-nickname').focus(); }, 50);
+}
+function closeAccEditModal() {
+    document.getElementById('acc-edit-modal').classList.add('hidden');
+}
+function saveAccEdit() {
+    var id = document.getElementById('acc-edit-id').value;
+    var nickname = document.getElementById('acc-edit-nickname').value.trim();
+    var err = document.getElementById('acc-edit-error');
+    err.classList.add('hidden');
+    if (!nickname) {
+        err.textContent = '별명을 입력해주세요';
+        err.classList.remove('hidden');
+        return;
+    }
+    fetch('/api/my/accounts/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nickname: nickname }),
+    }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(res) {
+        if (res.ok) location.reload();
+        else { err.textContent = res.data.error || '실패'; err.classList.remove('hidden'); }
+    });
+}
+
+// 외부 클릭 → 검색결과 닫기
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('#t-search') && !e.target.closest('#t-search-results')) {
+        document.getElementById('t-search-results').classList.add('hidden');
+    }
+});
+
+// ESC → 모달 닫기
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    if (!document.getElementById('trade-modal').classList.contains('hidden')) closeTradeModal();
+    if (!document.getElementById('account-modal').classList.contains('hidden')) closeAccountModal();
+});
+
+// 페이지 떠날 때 정지
+window.addEventListener('beforeunload', function() {
+    if (liveTimer) clearInterval(liveTimer);
+});
+
+applyMask();
+renderFx();
+
+// 페이지 진입 시 자동 1회 갱신
+{% if accounts %}refreshNow();{% endif %}
+
+// ───────── 계좌 DnD ─────────
+(function() {
+    var list = document.getElementById('acc-list');
+    if (!list || typeof Sortable === 'undefined') return;
+    Sortable.create(list, {
+        handle: '.drag-handle',
+        animation: 160,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        dragClass: 'sortable-drag',
+        onEnd: function() {
+            var order = Array.prototype.map.call(
+                list.querySelectorAll('.acc-card'),
+                function(el) { return +el.dataset.accountId; }
+            );
+            fetch('/api/my/accounts/reorder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order: order }),
+            });
+        },
+    });
+})();
+</script>
+
+{% endblock %}

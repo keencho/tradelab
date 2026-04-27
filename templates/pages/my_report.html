@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Report{% endblock %}
+
+{% block head_extra %}
+<style>
+    .kpi-card { background: #212226; border-radius: 16px; padding: 20px; }
+    .kpi-label { font-size: 11px; color: #8B95A1; text-transform: uppercase; letter-spacing: .04em; }
+    .kpi-value { font-size: 24px; font-weight: 700; color: #F2F4F6; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .chart-card { background: #212226; border-radius: 16px; padding: 20px; }
+    .chart-title { font-size: 13px; font-weight: 600; color: #F2F4F6; margin-bottom: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-5 flex-wrap gap-3">
+    <div>
+        <h2 class="text-xl lg:text-2xl font-bold text-white">리포트</h2>
+        <p class="text-xs text-muted mt-0.5">실현손익 · 종목별 · 계좌/시장 비중</p>
+    </div>
+    <a href="/my" class="h-9 px-3 text-xs rounded-xl bg-elevated text-white hover:bg-elevated/70 transition-colors flex items-center gap-1.5 font-medium">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+        </svg>
+        내 자산
+    </a>
+</div>
+
+{% if empty %}
+<div class="bg-surface rounded-card p-10 text-center">
+    <p class="text-sm text-muted mb-4">계좌/거래 데이터가 없습니다.</p>
+    <a href="/my" class="px-5 py-2.5 text-sm rounded-xl bg-toss text-white inline-block">내 자산 페이지로</a>
+</div>
+{% else %}
+
+<!-- KPI -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+    <div class="kpi-card">
+        <p class="kpi-label">누적 실현손익</p>
+        <p class="kpi-value {% if kpi.total_realized > 0 %}text-[#F04452]{% elif kpi.total_realized < 0 %}text-toss{% endif %}">
+            {{ "{:+,.0f}".format(kpi.total_realized) }}
+        </p>
+    </div>
+    <div class="kpi-card">
+        <p class="kpi-label">누적 수수료</p>
+        <p class="kpi-value">{{ "{:,.0f}".format(kpi.total_fee) }}</p>
+    </div>
+    <div class="kpi-card">
+        <p class="kpi-label">누적 세금</p>
+        <p class="kpi-value">{{ "{:,.0f}".format(kpi.total_tax) }}</p>
+    </div>
+    <div class="kpi-card">
+        <p class="kpi-label">현재 보유 취득가</p>
+        <p class="kpi-value">{{ "{:,.0f}".format(kpi.total_cost_open) }}</p>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+    <div class="kpi-card">
+        <p class="kpi-label">총 거래</p>
+        <p class="kpi-value">{{ kpi.trade_count }}<span class="text-sm text-muted ml-1">회</span></p>
+    </div>
+    <div class="kpi-card">
+        <p class="kpi-label">매수 / 매도 / 배당</p>
+        <p class="kpi-value text-base">
+            <span class="text-[#F04452]">{{ kpi.buy_count }}</span>
+            <span class="text-muted mx-1">·</span>
+            <span class="text-toss">{{ kpi.sell_count }}</span>
+            <span class="text-muted mx-1">·</span>
+            <span class="text-muted">{{ kpi.div_count }}</span>
+        </p>
+    </div>
+    <div class="kpi-card">
+        <p class="kpi-label">보유 종목</p>
+        <p class="kpi-value">{{ kpi.holding_count }}<span class="text-sm text-muted ml-1">개</span></p>
+    </div>
+    <div class="kpi-card">
+        <p class="kpi-label">활성 계좌</p>
+        <p class="kpi-value">{{ accounts|length }}<span class="text-sm text-muted ml-1">개</span></p>
+    </div>
+</div>
+
+<!-- 월별 실현손익 -->
+<div class="chart-card mb-5">
+    <h3 class="chart-title">월별 실현손익</h3>
+    <div id="chart-monthly" style="height: 320px;"></div>
+    {% if not monthly %}
+    <p class="text-xs text-muted text-center py-4">실현 거래(매도/배당) 없음</p>
+    {% endif %}
+</div>
+
+<!-- 종목별 TOP10 + 도넛 -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-5">
+    <div class="chart-card">
+        <h3 class="chart-title">종목별 누적 실현손익 TOP 10</h3>
+        <div id="chart-tickers" style="height: 360px;"></div>
+        {% if not top_tickers %}
+        <p class="text-xs text-muted text-center py-4">데이터 없음</p>
+        {% endif %}
+    </div>
+    <div class="chart-card">
+        <h3 class="chart-title">시장별 보유 비중 (취득가 기준)</h3>
+        <div id="chart-market" style="height: 360px;"></div>
+        {% if not by_market %}
+        <p class="text-xs text-muted text-center py-4">보유 종목 없음</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="chart-card mb-5">
+    <h3 class="chart-title">계좌별 보유 비중 (취득가 기준)</h3>
+    <div id="chart-account" style="height: 320px;"></div>
+    {% if not by_account %}
+    <p class="text-xs text-muted text-center py-4">보유 종목 없음</p>
+    {% endif %}
+</div>
+
+<!-- 종목별 표 -->
+<div class="bg-surface rounded-card overflow-hidden">
+    <div class="p-4 lg:p-5 border-b border-elevated/60">
+        <h3 class="text-sm font-semibold text-white">종목별 거래 통계</h3>
+    </div>
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="text-[11px] text-muted uppercase tracking-wider">
+                <th class="text-left px-5 py-2.5 font-medium">종목</th>
+                <th class="text-right px-3 py-2.5 font-medium">거래 횟수</th>
+                <th class="text-right px-3 py-2.5 font-medium">누적 실현손익</th>
+                <th class="text-right px-3 py-2.5 font-medium">누적 수수료</th>
+                <th class="text-right px-5 py-2.5 font-medium">누적 세금</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in top_tickers %}
+            <tr class="border-t border-elevated/40 hover:bg-elevated/30 transition-colors">
+                <td class="px-5 py-3">
+                    <span class="font-medium text-white">{{ r.name }}</span>
+                    <span class="text-[11px] text-muted ml-1">{{ r.ticker }}</span>
+                </td>
+                <td class="px-3 py-3 text-right text-muted tabular-nums">{{ r.trades }}</td>
+                <td class="px-3 py-3 text-right tabular-nums {% if r.realized > 0 %}text-[#F04452]{% elif r.realized < 0 %}text-toss{% else %}text-muted{% endif %}">
+                    {{ "{:+,.0f}".format(r.realized) }}
+                </td>
+                <td class="px-3 py-3 text-right text-muted tabular-nums">{{ "{:,.0f}".format(r.fee) }}</td>
+                <td class="px-5 py-3 text-right text-muted tabular-nums">{{ "{:,.0f}".format(r.tax) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+var DATA = {
+    monthly: {{ monthly | tojson }},
+    tickers: {{ top_tickers | tojson }},
+    accounts: {{ by_account | tojson }},
+    markets: {{ by_market | tojson }}
+};
+
+var DARK = {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { family: 'Pretendard, sans-serif', color: '#F2F4F6', size: 12 },
+    margin: { t: 10, r: 10, b: 40, l: 60 },
+    xaxis: { gridcolor: '#2C2D33', linecolor: '#2C2D33', tickfont: { color: '#8B95A1' } },
+    yaxis: { gridcolor: '#2C2D33', linecolor: '#2C2D33', tickfont: { color: '#8B95A1' } },
+};
+var DONUT_COLORS = ['#3182F6', '#F04452', '#FF9F00', '#22C55E', '#A855F7', '#EAB308', '#06B6D4', '#EC4899'];
+
+// 월별 실현손익
+if (DATA.monthly.length) {
+    var months = DATA.monthly.map(function(d) { return d.month; });
+    var pnls = DATA.monthly.map(function(d) { return d.pnl; });
+    var colors = pnls.map(function(v) { return v >= 0 ? '#F04452' : '#3182F6'; });
+    Plotly.newPlot('chart-monthly', [{
+        x: months, y: pnls, type: 'bar',
+        marker: { color: colors },
+        hovertemplate: '%{x}<br><b>%{y:,.0f}</b><extra></extra>',
+    }], Object.assign({}, DARK), { displayModeBar: false, responsive: true });
+}
+
+// 종목 TOP10
+if (DATA.tickers.length) {
+    var sorted = DATA.tickers.slice().reverse();
+    var names = sorted.map(function(d) { return d.name; });
+    var vals = sorted.map(function(d) { return d.realized; });
+    var colors = vals.map(function(v) { return v >= 0 ? '#F04452' : '#3182F6'; });
+    Plotly.newPlot('chart-tickers', [{
+        x: vals, y: names, type: 'bar', orientation: 'h',
+        marker: { color: colors },
+        hovertemplate: '<b>%{y}</b><br>%{x:,.0f}<extra></extra>',
+    }], Object.assign({}, DARK, { margin: { t: 10, r: 20, b: 40, l: 100 } }),
+    { displayModeBar: false, responsive: true });
+}
+
+// 시장
+if (DATA.markets.length) {
+    Plotly.newPlot('chart-market', [{
+        labels: DATA.markets.map(function(d) { return d.name; }),
+        values: DATA.markets.map(function(d) { return d.value; }),
+        type: 'pie', hole: 0.55,
+        marker: { colors: DONUT_COLORS },
+        textinfo: 'label+percent',
+        textfont: { color: '#F2F4F6' },
+        hovertemplate: '<b>%{label}</b><br>%{value:,.0f}<br>%{percent}<extra></extra>',
+    }], Object.assign({}, DARK, { margin: { t: 10, r: 10, b: 10, l: 10 }, showlegend: false }),
+    { displayModeBar: false, responsive: true });
+}
+
+// 계좌
+if (DATA.accounts.length) {
+    Plotly.newPlot('chart-account', [{
+        labels: DATA.accounts.map(function(d) { return d.name; }),
+        values: DATA.accounts.map(function(d) { return d.value; }),
+        type: 'pie', hole: 0.55,
+        marker: { colors: DONUT_COLORS },
+        textinfo: 'label+percent',
+        textfont: { color: '#F2F4F6' },
+        hovertemplate: '<b>%{label}</b><br>%{value:,.0f}<br>%{percent}<extra></extra>',
+    }], Object.assign({}, DARK, { margin: { t: 10, r: 10, b: 10, l: 10 }, showlegend: false }),
+    { displayModeBar: false, responsive: true });
+}
+</script>
+
+{% endif %}
+{% endblock %}

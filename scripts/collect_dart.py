@@ -5,6 +5,8 @@ cron: 30 16 * * * cd ~/tradelab && venv/bin/python scripts/collect_dart.py
 dart.fss.or.kr 스크래핑 기반이라 응답 지연이 잦음. 장마감 이후 하루 1회만 수집.
 """
 
+import os
+import signal
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -17,6 +19,15 @@ from db.models import SignalData
 from data.signal_collectors import collect_dart_insider
 
 logger = get_logger("collect_dart")
+
+
+# DART는 dart.fss.or.kr 스크래핑 기반이라 무한 hang 가능 — 3분 하드 타임아웃
+def _hard_timeout(signum, frame):
+    logger.error("collect_dart 하드 타임아웃 (180s) — 프로세스 강제 종료")
+    os._exit(1)
+
+signal.signal(signal.SIGALRM, _hard_timeout)
+signal.alarm(180)
 
 
 def run():

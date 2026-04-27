@@ -48,6 +48,7 @@ ECOS_API_KEY = os.getenv("ECOS_API_KEY", "")
 
 # --- 인증 ---
 AUTH_ENABLED = env != "local"  # 로컬에서는 인증 비활성화
+IS_LOCAL = env == "local"      # /my/* 등 외부 시세 호출 기능 차단용
 SESSION_EXPIRE_HOURS = 24
 
 # AUTH_USERS 형식: "user1:pw1,user2:pw2"
@@ -112,6 +113,57 @@ COOLDOWN_DEFAULT = 60         # 기타 시그널: 1시간
 DEFAULT_CAPITAL = 100_000_000  # 1억원
 STOCK_FEE_RATE = 0.00015      # 주식 수수료 0.015%
 CRYPTO_FEE_RATE = 0.001       # 코인 수수료 0.1%
+
+# --- 실투자 (sycho 전용) ---
+MY_USER = "sycho"
+
+# (broker, account_type) → {buy: %, sell: %, tax_sell: %}
+# 매수/매도 수수료, 매도 거래세 (퍼센트)
+BROKER_FEES: dict[tuple[str, str], dict[str, float]] = {
+    ("toss",    "regular_kr"):      {"buy": 0.0,   "sell": 0.0,   "tax_sell": 0.18},   # 토스 국내주식 수수료 한시 무료
+    ("toss",    "regular_oversea"): {"buy": 0.1,   "sell": 0.1,   "tax_sell": 0.00229},
+    ("samsung", "regular_kr"):      {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
+    ("samsung", "regular_oversea"): {"buy": 0.07,  "sell": 0.07,  "tax_sell": 0.00229},
+    ("samsung", "isa"):             {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
+    ("samsung", "pension"):         {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
+    ("samsung", "irp"):             {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
+    ("kis",     "regular_kr"):      {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
+    ("kis",     "regular_oversea"): {"buy": 0.07,  "sell": 0.07,  "tax_sell": 0.00229},
+    ("kis",     "isa"):             {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
+    ("kis",     "pension"):         {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
+    ("upbit",   "crypto"):          {"buy": 0.05,  "sell": 0.05,  "tax_sell": 0.0},
+    ("bithumb", "crypto"):          {"buy": 0.04,  "sell": 0.04,  "tax_sell": 0.0},
+    ("binance", "crypto"):          {"buy": 0.1,   "sell": 0.1,   "tax_sell": 0.0},
+    ("bybit",   "crypto"):          {"buy": 0.1,   "sell": 0.1,   "tax_sell": 0.0},
+}
+
+BROKER_NAMES = {
+    "toss": "토스증권",
+    "samsung": "삼성증권",
+    "kis": "한국투자증권",
+    "upbit": "업비트",
+    "bithumb": "빗썸",
+    "binance": "바이낸스",
+    "bybit": "바이비트",
+}
+
+ACCOUNT_TYPE_NAMES = {
+    "regular_kr": "일반(국내)",
+    "regular_oversea": "일반(해외)",
+    "isa": "ISA",
+    "pension": "연금저축",
+    "irp": "IRP",
+    "crypto": "코인",
+}
+
+ACCOUNT_TYPE_MARKET = {
+    "regular_kr": "kr_stock",
+    "regular_oversea": "us_stock",
+    "isa": "kr_stock",
+    "pension": "kr_stock",
+    "irp": "kr_stock",
+    "crypto": "crypto",
+}
 
 
 # --- 로깅 ---
