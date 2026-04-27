@@ -620,6 +620,51 @@ async def my_assets(request: Request):
         for h in closed_holdings:
             closed_by_account.setdefault(h.account_id, []).append(h)
 
+        # 최근 12개월 월별 실현손익 (계좌 통화별)
+        from datetime import datetime, timedelta
+        from config import KST as _KST
+        monthly_realized: list[dict] = []
+        if account_ids:
+            now_dt = datetime.now(_KST).replace(tzinfo=None)
+            # 12개월 전 1일 0시
+            start_y = now_dt.year
+            start_m = now_dt.month - 11
+            while start_m <= 0:
+                start_m += 12
+                start_y -= 1
+            cutoff = datetime(start_y, start_m, 1)
+
+            acc_ccy = {a.id: a.currency for a in accounts}
+            real_trades = (
+                session.query(RealTrade)
+                .filter(
+                    RealTrade.account_id.in_(account_ids),
+                    RealTrade.executed_at >= cutoff,
+                    RealTrade.realized_pnl != 0,
+                )
+                .all()
+            )
+
+            month_buckets: dict[str, dict[str, float]] = {}
+            for t in real_trades:
+                key = t.executed_at.strftime("%Y-%m")
+                ccy = acc_ccy.get(t.account_id, "KRW")
+                bucket = month_buckets.setdefault(key, {})
+                bucket[ccy] = bucket.get(ccy, 0.0) + t.realized_pnl
+
+            # 12개월 모두 채우기 (값 없는 달도 0)
+            for i in range(12):
+                m = start_m + i
+                y = start_y
+                while m > 12:
+                    m -= 12
+                    y += 1
+                key = f"{y:04d}-{m:02d}"
+                monthly_realized.append({
+                    "month": key,
+                    "by_ccy": month_buckets.get(key, {}),
+                })
+
         return _page_response(request, "pages/my.html", {
             "request": request,
             "page": "my",
@@ -627,6 +672,7 @@ async def my_assets(request: Request):
             "account_map": account_map,
             "holdings_by_account": holdings_by_account,
             "closed_by_account": closed_by_account,
+            "monthly_realized": monthly_realized,
             "trades": trades,
             "broker_options": BROKER_NAMES,
             "account_type_options": ACCOUNT_TYPE_NAMES,

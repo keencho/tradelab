@@ -120,17 +120,18 @@ MY_USER = "sycho"
 # (broker, account_type) → {buy: %, sell: %, tax_sell: %}
 # 매수/매도 수수료, 매도 거래세 (퍼센트)
 BROKER_FEES: dict[tuple[str, str], dict[str, float]] = {
-    ("toss",    "regular_kr"):      {"buy": 0.0,   "sell": 0.0,   "tax_sell": 0.18},   # 토스 국내주식 수수료 한시 무료
+    # 한국주식 거래세 0.20% (증권거래세 + 농어촌특별세)
+    ("toss",    "regular_kr"):      {"buy": 0.0,   "sell": 0.0,   "tax_sell": 0.20},   # 토스 수수료 한시 무료
     ("toss",    "regular_oversea"): {"buy": 0.1,   "sell": 0.1,   "tax_sell": 0.00229},
-    ("samsung", "regular_kr"):      {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
+    ("samsung", "regular_kr"):      {"buy": 0.015, "sell": 0.015, "tax_sell": 0.20},
     ("samsung", "regular_oversea"): {"buy": 0.07,  "sell": 0.07,  "tax_sell": 0.00229},
-    ("samsung", "isa"):             {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
-    ("samsung", "pension"):         {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
-    ("samsung", "irp"):             {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
-    ("kis",     "regular_kr"):      {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
+    ("samsung", "isa"):             {"buy": 0.015, "sell": 0.015, "tax_sell": 0.20},
+    ("samsung", "pension"):         {"buy": 0.015, "sell": 0.015, "tax_sell": 0.20},
+    ("samsung", "irp"):             {"buy": 0.015, "sell": 0.015, "tax_sell": 0.20},
+    ("kis",     "regular_kr"):      {"buy": 0.015, "sell": 0.015, "tax_sell": 0.20},
     ("kis",     "regular_oversea"): {"buy": 0.07,  "sell": 0.07,  "tax_sell": 0.00229},
-    ("kis",     "isa"):             {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
-    ("kis",     "pension"):         {"buy": 0.015, "sell": 0.015, "tax_sell": 0.18},
+    ("kis",     "isa"):             {"buy": 0.015, "sell": 0.015, "tax_sell": 0.20},
+    ("kis",     "pension"):         {"buy": 0.015, "sell": 0.015, "tax_sell": 0.20},
     ("upbit",   "crypto"):          {"buy": 0.05,  "sell": 0.05,  "tax_sell": 0.0},
     ("bithumb", "crypto"):          {"buy": 0.04,  "sell": 0.04,  "tax_sell": 0.0},
     ("binance", "crypto"):          {"buy": 0.1,   "sell": 0.1,   "tax_sell": 0.0},

@@ -1,6 +1,8 @@
 import hashlib
+import json
 import secrets
 import time
+from pathlib import Path
 from urllib.request import urlopen, Request as UrlRequest
 from urllib.parse import urlencode
 
@@ -17,6 +19,42 @@ logger = get_logger("auth")
 COOKIE_NAME = "tl_session"
 # token -> (expire_timestamp, username)
 _sessions: dict[str, tuple[float, str]] = {}
+
+_SESSIONS_FILE = Path(__file__).resolve().parent.parent / "sessions.json"
+
+
+def _load_sessions():
+    """앱 시작 시 디스크에서 세션 복원 — 재시작/배포 후에도 로그인 유지."""
+    global _sessions
+    if not _SESSIONS_FILE.exists():
+        return
+    try:
+        with open(_SESSIONS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        now = time.time()
+        _sessions = {
+            tok: (float(v[0]), str(v[1]))
+            for tok, v in data.items()
+            if isinstance(v, (list, tuple)) and len(v) == 2 and float(v[0]) > now
+        }
+        logger.info(f"세션 복원: {len(_sessions)}개")
+    except Exception as e:
+        logger.error(f"세션 로드 실패: {e}")
+        _sessions = {}
+
+
+def _save_sessions():
+    """현재 세션을 디스크에 저장 — 변경 시마다 호출."""
+    try:
+        tmp = _SESSIONS_FILE.with_suffix(".json.tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({k: list(v) for k, v in _sessions.items()}, f)
+        tmp.replace(_SESSIONS_FILE)
+    except Exception as e:
+        logger.error(f"세션 저장 실패: {e}")
+
+
+_load_sessions()
 
 
 def _make_token() -> str:
@@ -100,6 +138,7 @@ def create_session(request: Request, response: Response):
     username = _get_username(request)
     token = _make_token()
     _sessions[token] = (time.time() + _session_ttl(), username)
+    _save_sessions()
 
     response.set_cookie(
         key=COOKIE_NAME,
@@ -125,6 +164,7 @@ def reset_session(request: Request, response: Response):
 
     token = _make_token()
     _sessions[token] = (time.time() + _session_ttl(), username)
+    _save_sessions()
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
@@ -139,6 +179,7 @@ def logout(request: Request):
     token = request.cookies.get(COOKIE_NAME)
     if token and token in _sessions:
         del _sessions[token]
+        _save_sessions()
 
 
 def get_current_user(request: Request) -> str:

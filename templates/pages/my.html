@@ -198,6 +198,25 @@
     <div id="summary-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
 </div>
 
+{% if accounts %}
+<!-- 월별 실현손익 카드 -->
+<div class="bg-surface rounded-card p-4 lg:p-5 mb-5">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div>
+            <p class="text-[11px] text-muted uppercase tracking-wider">월별 실현손익</p>
+            <p class="text-xs text-muted mt-0.5">최근 12개월 · KRW 환산</p>
+        </div>
+        <div class="flex items-center gap-3 text-[11px]">
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-[#F04452]"></span><span class="text-muted">수익</span></span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-toss"></span><span class="text-muted">손실</span></span>
+            <span id="monthly-total" class="text-muted hidden lg:inline">12개월 합 —</span>
+        </div>
+    </div>
+    <div id="chart-monthly-realized" style="height: 180px;"></div>
+    <p id="monthly-empty" class="hidden text-xs text-muted text-center py-12">실현 거래(매도/배당) 없음</p>
+</div>
+{% endif %}
+
 {% if not accounts %}
 <!-- 계좌 없음 empty state -->
 <div class="bg-surface rounded-card p-10 text-center">
@@ -1065,11 +1084,11 @@ function applyRefresh(data) {
 }
 
 function refreshNow() {
-    if (refreshing) return;
+    if (refreshing) return Promise.resolve();
     refreshing = true;
     var icon = document.getElementById('refresh-icon');
     icon.classList.add('spin');
-    fetch('/api/my/refresh')
+    return fetch('/api/my/refresh')
         .then(function(r) { return r.json(); })
         .then(function(data) { if (data && data.holdings) applyRefresh(data); })
         .catch(function(e) { console.error(e); })
@@ -1079,40 +1098,57 @@ function refreshNow() {
         });
 }
 
+var liveOn = false;
+
 function _setLiveLabel() {
-    document.getElementById('live-label').textContent =
-        '실시간 · ' + liveCountdown + '초 후 갱신';
+    var label = document.getElementById('live-label');
+    if (!liveOn) { label.textContent = '실시간 OFF'; return; }
+    if (refreshing) {
+        label.textContent = '실시간 · 갱신 중...';
+    } else {
+        label.textContent = '실시간 · ' + liveCountdown + '초 후 갱신';
+    }
+}
+
+function _liveLoop() {
+    // 1) fetch 완료까지 대기
+    refreshNow().then(function() {
+        if (!liveOn) return;
+        // 2) 5초 카운트다운
+        liveCountdown = LIVE_INTERVAL;
+        _setLiveLabel();
+        liveTimer = setInterval(function() {
+            liveCountdown -= 1;
+            _setLiveLabel();
+            if (liveCountdown <= 0) {
+                clearInterval(liveTimer);
+                liveTimer = null;
+                if (liveOn) _liveLoop();   // 체인: 다음 fetch
+            }
+        }, 1000);
+    });
 }
 
 function toggleLive() {
-    var label = document.getElementById('live-label');
     var btn = document.getElementById('live-btn');
     var dot = document.getElementById('live-dot');
-    if (liveTimer) {
-        clearInterval(liveTimer);
-        liveTimer = null;
+    if (liveOn) {
+        liveOn = false;
+        if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
         liveCountdown = 0;
-        label.textContent = '실시간 OFF';
+        _setLiveLabel();
         dot.classList.remove('bg-[#F04452]', 'live-dot');
         dot.classList.add('bg-muted');
         btn.classList.remove('bg-toss/15', 'text-toss');
         btn.classList.add('bg-elevated', 'text-muted');
     } else {
-        refreshNow();
-        liveCountdown = LIVE_INTERVAL;
-        _setLiveLabel();
-        liveTimer = setInterval(function() {
-            liveCountdown -= 1;
-            if (liveCountdown <= 0) {
-                refreshNow();
-                liveCountdown = LIVE_INTERVAL;
-            }
-            _setLiveLabel();
-        }, 1000);
+        liveOn = true;
         dot.classList.remove('bg-muted');
         dot.classList.add('bg-[#F04452]', 'live-dot');
         btn.classList.remove('bg-elevated', 'text-muted');
         btn.classList.add('bg-toss/15', 'text-toss');
+        _setLiveLabel();
+        _liveLoop();
     }
 }
 
@@ -1497,6 +1533,96 @@ window.addEventListener('beforeunload', function() {
 
 applyMask();
 renderFx();
+
+// ───────── 월별 실현손익 차트 ─────────
+var MONTHLY_REALIZED = {{ monthly_realized | tojson if monthly_realized is defined else '[]' }};
+
+function renderMonthlyRealized() {
+    var el = document.getElementById('chart-monthly-realized');
+    var emptyEl = document.getElementById('monthly-empty');
+    var totalEl = document.getElementById('monthly-total');
+    if (!el || !MONTHLY_REALIZED || !MONTHLY_REALIZED.length) return;
+
+    var values = MONTHLY_REALIZED.map(function(m) {
+        var sum = 0;
+        Object.keys(m.by_ccy || {}).forEach(function(c) {
+            sum += fxToKrw(m.by_ccy[c], c);
+        });
+        return Math.round(sum);
+    });
+
+    var hasAny = values.some(function(v) { return v !== 0; });
+    if (!hasAny) {
+        el.classList.add('hidden');
+        emptyEl.classList.remove('hidden');
+        if (totalEl) totalEl.textContent = '12개월 합 ₩0';
+        return;
+    }
+    el.classList.remove('hidden');
+    emptyEl.classList.add('hidden');
+
+    var labels = MONTHLY_REALIZED.map(function(m) {
+        // "2026-04" → "26/04"
+        var p = m.month.split('-');
+        return p[0].slice(2) + '/' + p[1];
+    });
+    var colors = values.map(function(v) {
+        if (v > 0) return '#F04452';
+        if (v < 0) return '#3182F6';
+        return '#2C2D33';
+    });
+
+    var totalSum = values.reduce(function(s, v) { return s + v; }, 0);
+    if (totalEl) {
+        var sign = totalSum >= 0 ? '+' : '-';
+        totalEl.innerHTML = '12개월 합 <span class="' +
+            (totalSum > 0 ? 'text-[#F04452]' : (totalSum < 0 ? 'text-toss' : 'text-muted')) +
+            ' font-semibold">' + sign + '₩' + Math.abs(totalSum).toLocaleString('ko-KR') + '</span>';
+    }
+
+    Plotly.newPlot(el, [{
+        x: labels,
+        y: values,
+        type: 'bar',
+        marker: { color: colors },
+        hovertemplate: '<b>%{x}</b><br>%{y:+,.0f} 원<extra></extra>',
+    }], {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { family: 'Pretendard, sans-serif', color: '#F2F4F6', size: 11 },
+        margin: { t: 8, r: 12, b: 32, l: 56 },
+        bargap: 0.35,
+        xaxis: {
+            gridcolor: 'transparent',
+            linecolor: 'rgba(44,45,51,.6)',
+            tickfont: { color: '#8B95A1', size: 10 },
+            fixedrange: true,
+        },
+        yaxis: {
+            gridcolor: 'rgba(44,45,51,.4)',
+            linecolor: 'transparent',
+            zerolinecolor: 'rgba(139,149,161,.3)',
+            tickfont: { color: '#8B95A1', size: 10 },
+            tickformat: ',.0s',
+            fixedrange: true,
+        },
+        shapes: [{
+            type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 0, y1: 0,
+            line: { color: 'rgba(139,149,161,.3)', width: 1 },
+        }],
+    }, { displayModeBar: false, responsive: true });
+}
+
+renderMonthlyRealized();
+
+// 환율 변경 시 재렌더 — saveFx 끝에 hook
+(function() {
+    var origSaveFx = window.saveFx;
+    window.saveFx = function() {
+        origSaveFx();
+        renderMonthlyRealized();
+    };
+})();
 
 // 페이지 진입 시 자동 1회 갱신
 {% if accounts %}refreshNow();{% endif %}
