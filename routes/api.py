@@ -12,7 +12,7 @@ from config import (
     ACCOUNT_TYPE_NAMES, ACCOUNT_TYPE_MARKET, IS_LOCAL, get_logger,
 )
 from db.database import SessionLocal
-from db.models import Signal, ResearchTicker, ResearchHistory, RealAccount, RealHolding, RealTrade
+from db.models import Signal, ResearchTicker, ResearchHistory, RealAccount, RealHolding, RealTrade, RealQuickWatch
 from analysis.llm import call_llm
 from routes.auth import reset_session, require_auth, logout, get_current_user, COOKIE_NAME
 from services import real_trader
@@ -1020,6 +1020,129 @@ async def my_trades_delete(request: Request, trade_id: int):
         session.close()
 
 
+# ── 관심 종목 (현재가 + 등락률만) ────────────────────────────
+
+MAX_QUICK_WATCH = 30
+
+
+@router.get("/my/watch")
+async def my_watch_list(request: Request):
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    session = SessionLocal()
+    try:
+        rows = (
+            session.query(RealQuickWatch)
+            .filter(RealQuickWatch.owner == user)
+            .order_by(RealQuickWatch.sort_order, RealQuickWatch.id)
+            .all()
+        )
+        return [{
+            "id": r.id, "market": r.market, "ticker": r.ticker,
+            "ticker_name": r.ticker_name,
+        } for r in rows]
+    finally:
+        session.close()
+
+
+@router.post("/my/watch")
+async def my_watch_create(request: Request):
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    body = await request.json()
+    market = (body.get("market") or "").strip()
+    ticker = (body.get("ticker") or "").strip()
+    ticker_name = (body.get("ticker_name") or "").strip()
+
+    if not market or not ticker:
+        return JSONResponse(status_code=400, content={"error": "market, ticker required"})
+    if market not in ("kr_stock", "us_stock", "crypto"):
+        return JSONResponse(status_code=400, content={"error": "invalid market"})
+
+    session = SessionLocal()
+    try:
+        exists = session.query(RealQuickWatch).filter(
+            RealQuickWatch.owner == user,
+            RealQuickWatch.market == market,
+            RealQuickWatch.ticker == ticker,
+        ).first()
+        if exists:
+            return JSONResponse(status_code=409, content={"error": "이미 등록됨"})
+
+        count = session.query(RealQuickWatch).filter(RealQuickWatch.owner == user).count()
+        if count >= MAX_QUICK_WATCH:
+            return JSONResponse(status_code=400, content={"error": f"최대 {MAX_QUICK_WATCH}종목"})
+
+        w = RealQuickWatch(
+            owner=user, market=market, ticker=ticker,
+            ticker_name=ticker_name, sort_order=count,
+        )
+        session.add(w)
+        session.commit()
+        return {"id": w.id, "status": "ok"}
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+@router.delete("/my/watch/{watch_id}")
+async def my_watch_delete(request: Request, watch_id: int):
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    session = SessionLocal()
+    try:
+        w = session.query(RealQuickWatch).filter(
+            RealQuickWatch.id == watch_id, RealQuickWatch.owner == user
+        ).first()
+        if not w:
+            return JSONResponse(status_code=404, content={"error": "not found"})
+        session.delete(w)
+        session.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+@router.post("/my/watch/reorder")
+async def my_watch_reorder(request: Request):
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    body = await request.json()
+    order = body.get("order") or []
+    if not isinstance(order, list):
+        return JSONResponse(status_code=400, content={"error": "order must be list"})
+
+    session = SessionLocal()
+    try:
+        rows = {
+            w.id: w for w in
+            session.query(RealQuickWatch).filter(RealQuickWatch.owner == user).all()
+        }
+        for idx, wid in enumerate(order):
+            try:
+                w = rows.get(int(wid))
+            except (TypeError, ValueError):
+                continue
+            if w:
+                w.sort_order = idx
+        session.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
 def _fetch_upbit_prices_batch(tickers: list[str]) -> dict[str, dict]:
     """Upbit로 KRW 코인 가격 일괄 조회 — 1번 호출."""
     if not tickers:
@@ -1079,7 +1202,7 @@ def _fetch_binance_prices_batch(tickers: list[str]) -> dict[str, dict]:
 
 @router.get("/my/refresh")
 async def my_refresh_prices(request: Request):
-    """모든 보유종목의 현재가를 즉시 fetch (배치 + 병렬)."""
+    """모든 보유종목 + 관심 종목 현재가 일괄 fetch (배치 + 병렬)."""
     user, denied = _require_user(request)
     if denied: return denied
 
@@ -1089,27 +1212,38 @@ async def my_refresh_prices(request: Request):
             a.id: a for a in
             session.query(RealAccount).filter(RealAccount.owner == user).all()
         }
-        if not accounts:
-            return {"holdings": [], "by_account": {}, "by_currency": {}, "fetched_at": ""}
-
         all_holdings = (
             session.query(RealHolding)
             .filter(RealHolding.account_id.in_(accounts.keys()))
             .all()
+        ) if accounts else []
+        holdings = [h for h in all_holdings if h.qty > 0]
+        closed_holdings = [h for h in all_holdings if h.qty == 0]
+
+        watches = (
+            session.query(RealQuickWatch)
+            .filter(RealQuickWatch.owner == user)
+            .order_by(RealQuickWatch.sort_order, RealQuickWatch.id)
+            .all()
         )
-        holdings = [h for h in all_holdings if h.qty > 0]   # 표시/평가용 (qty>0)
-        closed_holdings = [h for h in all_holdings if h.qty == 0]  # realized 합산 전용
+        watch_items = [{
+            "id": w.id, "market": w.market, "ticker": w.ticker,
+            "ticker_name": w.ticker_name,
+        } for w in watches]
     finally:
         session.close()
 
-    # (market, currency) → tickers 그룹화
+    # (market, currency) → tickers 그룹화 (보유 + 관심)
+    # 관심 종목은 KRW 기준 (코인은 Upbit)
     groups: dict[tuple[str, str], set] = {}
     for h in holdings:
         acc = accounts.get(h.account_id)
         ccy = acc.currency if acc else "KRW"
         groups.setdefault((h.market, ccy), set()).add(h.ticker)
+    for w in watch_items:
+        groups.setdefault((w["market"], "KRW"), set()).add(w["ticker"])
 
-    price_map: dict[tuple[str, str, str], dict] = {}  # (ticker, market, ccy) → {price, change_pct}
+    price_map: dict[tuple[str, str, str], dict] = {}
 
     async def kr_one(ticker: str):
         data = await asyncio.to_thread(_fetch_price, ticker, "kr_stock")
@@ -1145,6 +1279,17 @@ async def my_refresh_prices(request: Request):
 
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
+
+    # 관심 종목 결과 빌드
+    watch_out = []
+    for w in watch_items:
+        info = price_map.get((w["ticker"], w["market"], "KRW"), {})
+        watch_out.append({
+            "id": w["id"], "market": w["market"], "ticker": w["ticker"],
+            "ticker_name": w["ticker_name"],
+            "price": info.get("price", 0),
+            "change_pct": info.get("change_pct", 0),
+        })
 
     # 집계
     out_holdings = []
@@ -1221,5 +1366,6 @@ async def my_refresh_prices(request: Request):
         "holdings": out_holdings,
         "by_account": by_account,
         "by_currency": by_currency,
+        "watches": watch_out,
         "fetched_at": datetime.now(KST).strftime("%H:%M:%S"),
     }

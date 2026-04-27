@@ -203,3 +203,19 @@ class RealTrade(Base):
     realized_pnl: Mapped[float] = mapped_column(Float, default=0.0)  # 매도건만 계산
     executed_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst, index=True)
     memo: Mapped[str] = mapped_column(String(200), default="")
+
+
+class RealQuickWatch(Base):
+    """관심 종목 — 보유와 별개로 현재가/등락률만 보는 용도"""
+    __tablename__ = "real_quick_watch"
+    __table_args__ = (
+        UniqueConstraint("owner", "market", "ticker", name="uq_real_quick_watch"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner: Mapped[str] = mapped_column(String(30), index=True)
+    market: Mapped[str] = mapped_column(String(10))             # kr_stock/us_stock/crypto
+    ticker: Mapped[str] = mapped_column(String(30))
+    ticker_name: Mapped[str] = mapped_column(String(100), default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)

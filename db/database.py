@@ -39,7 +39,7 @@ def init_db():
     from db.models import (
         Price, News, Watchlist, SignalData, Signal, Trade, PortfolioSetting,
         ResearchTicker, ResearchHistory,
-        RealAccount, RealHolding, RealTrade,
+        RealAccount, RealHolding, RealTrade, RealQuickWatch,
     )
     Base.metadata.create_all(bind=engine)
     _migrate()

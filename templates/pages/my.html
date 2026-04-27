@@ -217,6 +217,22 @@
 </div>
 {% endif %}
 
+<!-- ─────── 관심 종목 (현재가 + 등락률) ─────── -->
+<div class="bg-surface rounded-card overflow-hidden mb-5">
+    <div class="flex items-center justify-between p-4 lg:p-5 border-b border-elevated/60">
+        <div class="min-w-0">
+            <h3 class="text-sm font-semibold text-white">관심 종목</h3>
+            <p class="text-[11px] text-muted mt-0.5">한눈에 현재가 · 전일대비 (보유와 별개)</p>
+        </div>
+        <button onclick="openWatchModal()" class="h-9 px-3 text-xs rounded-xl bg-elevated text-white hover:bg-elevated/70 transition-colors flex items-center gap-1.5 font-medium shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            <span class="hidden sm:inline">종목 추가</span>
+        </button>
+    </div>
+    <div id="watch-list" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-0.5 p-2 lg:p-3"></div>
+    <p id="watch-empty" class="hidden text-xs text-muted text-center py-8">관심 종목 없음 — 우상단 + 버튼으로 추가</p>
+</div>
+
 {% if not accounts %}
 <!-- 계좌 없음 empty state -->
 <div class="bg-surface rounded-card p-10 text-center">
@@ -597,6 +613,38 @@
 </div>
 
 {% endif %}
+
+
+<!-- ─────── 관심 종목 추가 모달 ─────── -->
+<div id="watch-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end lg:items-center justify-center p-0 lg:p-4"
+    onmousedown="_modalDown(event, this)" onclick="_modalClick(event, this, closeWatchModal)">
+    <div class="modal-in bg-surface rounded-t-3xl lg:rounded-card w-full max-w-md">
+        <div class="p-5 lg:p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h3 class="text-base font-bold text-white">관심 종목 추가</h3>
+                <button onclick="closeWatchModal()" class="text-muted hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="grid grid-cols-4 gap-1.5 p-1 bg-elevated rounded-xl mb-3" id="w-market-seg">
+                <button data-market="" class="seg-btn bg-toss text-white">전체</button>
+                <button data-market="kr_stock" class="seg-btn text-muted hover:text-white">한국</button>
+                <button data-market="us_stock" class="seg-btn text-muted hover:text-white">미국</button>
+                <button data-market="crypto" class="seg-btn text-muted hover:text-white">코인</button>
+            </div>
+            <div class="relative">
+                <input type="text" id="w-search" autocomplete="off" placeholder="종목명 또는 코드 검색" class="my-input pl-9">
+                <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+            </div>
+            <div id="w-search-results" class="mt-3 max-h-[60vh] lg:max-h-80 overflow-y-auto scroll-area">
+                <p class="text-xs text-muted text-center py-6">종목명을 입력해주세요</p>
+            </div>
+            <p id="w-error" class="text-xs text-[#F04452] hidden mt-2"></p>
+        </div>
+    </div>
+</div>
 
 
 <!-- ─────── 거래 모달 ─────── -->
@@ -1094,7 +1142,11 @@ function refreshNow() {
     icon.classList.add('spin');
     return fetch('/api/my/refresh')
         .then(function(r) { return r.json(); })
-        .then(function(data) { if (data && data.holdings) applyRefresh(data); })
+        .then(function(data) {
+            if (!data) return;
+            if (data.holdings) applyRefresh(data);
+            if (data.watches) renderWatchList(data.watches);
+        })
         .catch(function(e) { console.error(e); })
         .finally(function() {
             refreshing = false;
@@ -1542,6 +1594,186 @@ window.addEventListener('beforeunload', function() {
 applyMask();
 renderFx();
 
+// ───────── 관심 종목 ─────────
+var lastWatchPrices = {};
+var watchSortable = null;
+
+var MARKET_LABEL = { kr_stock: '한국', us_stock: '미국', crypto: '코인' };
+var MARKET_CCY = { kr_stock: '₩', us_stock: '$', crypto: '₩' };
+
+function _watchPriceFmt(market, price) {
+    var sym = MARKET_CCY[market] || '';
+    if (market === 'us_stock') {
+        return sym + (price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return sym + fmtMoney(price);
+}
+
+function renderWatchList(items) {
+    var wrap = document.getElementById('watch-list');
+    var empty = document.getElementById('watch-empty');
+    wrap.innerHTML = '';
+    if (!items || !items.length) {
+        empty.classList.remove('hidden');
+        return;
+    }
+    empty.classList.add('hidden');
+
+    items.forEach(function(it) {
+        var changePct = +it.change_pct || 0;
+        var color = changePct > 0 ? 'text-[#F04452]' : (changePct < 0 ? 'text-toss' : 'text-muted');
+        var sign = changePct > 0 ? '+' : '';
+
+        var row = document.createElement('div');
+        row.className = 'group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-elevated/40 transition-colors';
+        row.dataset.watchId = it.id;
+        row.dataset.ticker = it.ticker;
+        row.dataset.market = it.market;
+        row.innerHTML =
+            '<button class="watch-handle drag-handle text-muted/40 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity shrink-0" title="드래그">' +
+                '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>' +
+            '</button>' +
+            '<span class="text-[9px] font-semibold w-7 text-center py-0.5 rounded bg-elevated text-muted shrink-0">' + (MARKET_LABEL[it.market] || it.market) + '</span>' +
+            '<div class="min-w-0 flex-1 leading-tight">' +
+                '<p class="text-sm font-semibold text-white truncate">' + (it.ticker_name || it.ticker) + '</p>' +
+                '<p class="text-[10px] text-muted truncate">' + it.ticker + '</p>' +
+            '</div>' +
+            '<div class="text-right shrink-0 leading-tight tabular-nums">' +
+                '<p class="text-sm font-semibold text-white" data-watch-price>' + (it.price ? _watchPriceFmt(it.market, it.price) : '—') + '</p>' +
+                '<p class="text-[11px] font-medium ' + color + '" data-watch-change>' + (it.price ? sign + changePct.toFixed(2) + '%' : '—') + '</p>' +
+            '</div>' +
+            '<button onclick="deleteWatch(' + it.id + ')" class="text-muted/40 hover:text-[#F04452] opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-1" title="삭제">' +
+                '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M6 18L18 6M6 6l12 12"/></svg>' +
+            '</button>';
+
+        // flash on price change
+        var key = it.market + ':' + it.ticker;
+        var prev = lastWatchPrices[key];
+        if (prev !== undefined && it.price && prev !== it.price) {
+            var priceEl = row.querySelector('[data-watch-price]');
+            priceEl.classList.add(it.price > prev ? 'flash-up' : 'flash-down');
+        }
+        lastWatchPrices[key] = it.price;
+
+        wrap.appendChild(row);
+    });
+
+    // SortableJS — 매번 list가 비워지므로 재바인딩
+    if (typeof Sortable !== 'undefined') {
+        if (watchSortable) watchSortable.destroy();
+        watchSortable = Sortable.create(wrap, {
+            handle: '.watch-handle',
+            animation: 160,
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            onEnd: function() {
+                var order = Array.prototype.map.call(
+                    wrap.querySelectorAll('[data-watch-id]'),
+                    function(el) { return +el.dataset.watchId; }
+                );
+                fetch('/api/my/watch/reorder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order: order }),
+                });
+            },
+        });
+    }
+}
+
+// ───── 관심 종목 추가 모달 ─────
+var wSearchTimer = null;
+var wMarket = '';
+
+function openWatchModal() {
+    document.getElementById('watch-modal').classList.remove('hidden');
+    document.getElementById('w-search').value = '';
+    document.getElementById('w-search-results').innerHTML = '<p class="text-xs text-muted text-center py-6">종목명을 입력해주세요</p>';
+    document.getElementById('w-error').classList.add('hidden');
+    setTimeout(function() { document.getElementById('w-search').focus(); }, 50);
+}
+function closeWatchModal() {
+    document.getElementById('watch-modal').classList.add('hidden');
+}
+function _setWatchMarket(m) {
+    wMarket = m;
+    var seg = document.getElementById('w-market-seg');
+    seg.querySelectorAll('button').forEach(function(b) {
+        b.classList.remove('bg-toss', 'text-white');
+        b.classList.add('text-muted');
+    });
+    var active = seg.querySelector('[data-market="' + m + '"]');
+    active.classList.remove('text-muted');
+    active.classList.add('bg-toss', 'text-white');
+    // 검색어 있으면 재검색
+    var q = document.getElementById('w-search').value.trim();
+    if (q) _doWatchSearch(q);
+}
+document.querySelectorAll('#w-market-seg [data-market]').forEach(function(b) {
+    b.addEventListener('click', function() { _setWatchMarket(b.dataset.market); });
+});
+
+function _doWatchSearch(q) {
+    var sr = document.getElementById('w-search-results');
+    sr.innerHTML = '<div class="p-3 text-xs text-muted flex items-center gap-2 justify-center"><div class="w-3 h-3 border border-toss/30 border-t-toss rounded-full spin"></div>검색 중...</div>';
+    fetch('/api/ticker/search?market=' + wMarket + '&q=' + encodeURIComponent(q))
+        .then(function(r) { return r.json(); })
+        .then(function(results) {
+            if (!results.length) {
+                sr.innerHTML = '<p class="text-xs text-muted text-center py-6">검색 결과 없음</p>';
+                return;
+            }
+            sr.innerHTML = results.map(function(it) {
+                return '<div class="px-3 py-2.5 hover:bg-elevated cursor-pointer flex items-center gap-2 rounded-lg transition-colors" ' +
+                    'data-t="' + it.ticker + '" data-n="' + (it.name || '').replace(/"/g, '&quot;') + '" data-m="' + it.market + '">' +
+                    '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-elevated text-muted">' + (MARKET_LABEL[it.market] || it.market) + '</span>' +
+                    '<span class="text-sm text-white flex-1 truncate">' + (it.name || it.ticker) + '</span>' +
+                    '<span class="text-[11px] text-muted">' + it.ticker + '</span>' +
+                    '</div>';
+            }).join('');
+            sr.querySelectorAll('div[data-t]').forEach(function(el) {
+                el.onclick = function() { addWatch(el.dataset.t, el.dataset.n, el.dataset.m); };
+            });
+        });
+}
+
+document.getElementById('w-search').addEventListener('input', function(e) {
+    var q = e.target.value.trim();
+    if (wSearchTimer) clearTimeout(wSearchTimer);
+    var sr = document.getElementById('w-search-results');
+    if (q.length < 1) {
+        sr.innerHTML = '<p class="text-xs text-muted text-center py-6">종목명을 입력해주세요</p>';
+        return;
+    }
+    wSearchTimer = setTimeout(function() { _doWatchSearch(q); }, 250);
+});
+
+function addWatch(ticker, name, market) {
+    var err = document.getElementById('w-error');
+    err.classList.add('hidden');
+    fetch('/api/my/watch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ market: market, ticker: ticker, ticker_name: name }),
+    })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(res) {
+        if (res.ok) {
+            closeWatchModal();
+            refreshNow();
+        } else {
+            err.textContent = res.data.error || '실패';
+            err.classList.remove('hidden');
+        }
+    });
+}
+
+function deleteWatch(id) {
+    fetch('/api/my/watch/' + id, { method: 'DELETE' })
+        .then(function(r) { if (r.ok) refreshNow(); });
+}
+
 // ───────── 월별 실현손익 차트 ─────────
 var MONTHLY_REALIZED = {{ monthly_realized | tojson if monthly_realized is defined else '[]' }};
 
@@ -1633,7 +1865,7 @@ renderMonthlyRealized();
 })();
 
 // 페이지 진입 시 자동 1회 갱신
-{% if accounts %}refreshNow();{% endif %}
+refreshNow();
 
 // ───────── 계좌 DnD ─────────
 (function() {
