@@ -150,8 +150,8 @@
 
 <!-- ─────── Hero 합산 카드 ─────── -->
 <div class="hero-grad rounded-card p-4 lg:p-7 mb-5">
-    <div class="flex items-start justify-between mb-4 flex-wrap gap-3 lg:gap-4">
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-x-3 lg:gap-x-6 gap-y-3 min-w-0 flex-1 w-full">
+    <div class="flex flex-col lg:flex-row lg:flex-wrap items-stretch lg:items-start lg:justify-between mb-4 gap-3 lg:gap-4">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-x-3 lg:gap-x-6 gap-y-3 min-w-0 w-full lg:flex-1 order-2 lg:order-1">
             <div class="min-w-0">
                 <p class="text-[10px] lg:text-[11px] text-muted uppercase tracking-wider">총 자산 <span class="text-muted/70">(KRW)</span></p>
                 <p id="hero-total" class="text-base lg:text-2xl font-bold text-white mt-1 tabular-nums whitespace-nowrap" data-money>—</p>
@@ -174,9 +174,9 @@
                 <p id="hero-breakdown" class="text-xs text-muted">새로고침을 눌러주세요</p>
             </div>
         </div>
-        <div class="flex items-start gap-2 flex-wrap">
+        <div class="flex items-stretch lg:items-start gap-2 order-1 lg:order-2 w-full lg:w-auto">
             <!-- 환율 박스 -->
-            <div class="rounded-xl bg-elevated/50 border border-elevated px-3 py-2 flex items-center gap-2">
+            <div class="rounded-xl bg-elevated/50 border border-elevated px-3 py-2 flex items-center gap-2 flex-1 lg:flex-none">
                 <div class="text-[11px]">
                     <p class="text-muted uppercase tracking-wider">환율</p>
                     <p class="text-white font-semibold tabular-nums">
@@ -189,7 +189,7 @@
                     </svg>
                 </button>
             </div>
-            <div class="rounded-xl bg-elevated/30 px-3 py-2 text-right">
+            <div class="rounded-xl bg-elevated/30 px-3 py-2 text-right flex-1 lg:flex-none">
                 <p class="text-[11px] text-muted uppercase tracking-wider">갱신</p>
                 <p id="hero-fetched" class="text-xs text-white font-medium mt-0.5">—</p>
             </div>
