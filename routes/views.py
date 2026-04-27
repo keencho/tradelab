@@ -10,7 +10,7 @@ from config import (
     BROKER_NAMES, ACCOUNT_TYPE_NAMES, get_logger,
 )
 from db.database import SessionLocal
-from db.models import News, Signal, RealAccount, RealHolding, RealTrade
+from db.models import News, Signal, RealAccount, RealHolding, RealTrade, Trade, PaperHolding, PortfolioSetting
 from routes.auth import require_auth, create_session, get_current_user, COOKIE_NAME, _get_client_ip
 
 router = APIRouter()
@@ -24,42 +24,6 @@ templates.env.filters["z_label"] = lambda z: (
     f"평소 대비 {abs(z):.1f}배 ({'매우 이례적' if abs(z) >= 3 else '이례적' if abs(z) >= 2.5 else '주의'})"
     if z else ""
 )
-
-
-# ── Mock 데이터 ──────────────────────────────────────────────
-
-MOCK_PORTFOLIO = {
-    "total_asset": 112_340_000,
-    "cash": 22_340_000,
-    "invested": 90_000_000,
-    "daily_pnl": 1_850_000,
-    "daily_pnl_pct": 1.67,
-    "total_pnl_pct": 12.34,
-    "positions": [
-        {"ticker": "NVDA", "market": "stock", "qty": 15, "avg_price": 850.00, "current_price": 920.50, "pnl_pct": 8.29, "pnl_amount": 1_057_500, "weight": 15.5},
-        {"ticker": "BTC/USDT", "market": "crypto", "qty": 0.5, "avg_price": 92_000, "current_price": 97_500, "pnl_pct": 5.98, "pnl_amount": 2_750, "weight": 43.4},
-        {"ticker": "ETH/USDT", "market": "crypto", "qty": 8.0, "avg_price": 3_200, "current_price": 3_450, "pnl_pct": 7.81, "pnl_amount": 2_000, "weight": 24.5},
-        {"ticker": "AAPL", "market": "stock", "qty": 20, "avg_price": 195.00, "current_price": 188.30, "pnl_pct": -3.44, "pnl_amount": -134_000, "weight": 3.4},
-        {"ticker": "005930.KS", "market": "stock", "qty": 50, "avg_price": 72_000, "current_price": 74_500, "pnl_pct": 3.47, "pnl_amount": 125_000, "weight": 3.3},
-        {"ticker": "SOL/USDT", "market": "crypto", "qty": 100, "avg_price": 95.00, "current_price": 112.80, "pnl_pct": 18.74, "pnl_amount": 1_780, "weight": 10.0},
-    ],
-    "trades": [
-        {"time": "02/25 13:20", "ticker": "NVDA", "side": "buy", "qty": 5, "price": 918.00, "fee": 689},
-        {"time": "02/25 11:05", "ticker": "BTC/USDT", "side": "buy", "qty": 0.1, "price": 97_200, "fee": 9_720},
-        {"time": "02/24 16:30", "ticker": "AAPL", "side": "sell", "qty": 10, "price": 189.50, "fee": 284},
-        {"time": "02/24 09:15", "ticker": "SOL/USDT", "side": "buy", "qty": 50, "price": 108.50, "fee": 5_425},
-        {"time": "02/23 14:00", "ticker": "005930.KS", "side": "buy", "qty": 50, "price": 72_000, "fee": 540},
-        {"time": "02/23 10:30", "ticker": "ETH/USDT", "side": "buy", "qty": 3.0, "price": 3_380, "fee": 1_014},
-        {"time": "02/22 15:45", "ticker": "NVDA", "side": "buy", "qty": 10, "price": 842.00, "fee": 1_263},
-    ],
-}
-
-
-MOCK_CHART_DATA = {
-    "dates": ["02/11","02/12","02/13","02/14","02/15","02/16","02/17","02/18","02/19","02/20","02/21","02/22","02/23","02/24","02/25"],
-    "portfolio": [100,100.8,101.2,100.5,101.8,103.2,103.0,104.5,105.1,106.8,108.2,109.5,110.1,111.2,112.3],
-    "benchmark": [100,100.5,100.8,100.2,100.9,101.5,101.3,102.0,102.4,103.1,103.8,104.2,104.5,104.9,105.3],
-}
 
 
 # ── 인증 체크 공통 ────────────────────────────────────────────
@@ -130,10 +94,22 @@ async def dashboard(request: Request):
             .all()
         )
 
+        # 시그널 방향별 집계
+        sig_bullish = sum(1 for s in recent_signals if s.direction == "bullish")
+        sig_bearish = sum(1 for s in recent_signals if s.direction == "bearish")
+        sig_neutral = len(recent_signals) - sig_bullish - sig_bearish
+
+        # 자산 영역 노출 여부 — 인증된 사용자 + 비로컬 + 계좌 1개 이상
+        user = get_current_user(request)
+        show_assets = bool(AUTH_ENABLED and not IS_LOCAL and user and user != "unknown")
+        if show_assets:
+            account_count = session.query(RealAccount).filter(RealAccount.owner == user).count()
+            show_assets = account_count > 0
+
         return _page_response(request, "pages/dashboard.html", {
             "request": request,
             "page": "dashboard",
-            "portfolio": MOCK_PORTFOLIO,
+            "show_assets": show_assets,
             "signals": recent_signals,
             "news": recent_news,
             "news_stats": {
@@ -142,7 +118,12 @@ async def dashboard(request: Request):
                 "negative": news_negative,
                 "neutral": news_neutral,
             },
-            "chart": MOCK_CHART_DATA,
+            "signal_stats": {
+                "total": len(recent_signals),
+                "bullish": sig_bullish,
+                "bearish": sig_bearish,
+                "neutral": sig_neutral,
+            },
         })
     finally:
         session.close()
@@ -150,11 +131,27 @@ async def dashboard(request: Request):
 
 @router.get("/portfolio", response_class=HTMLResponse)
 async def portfolio(request: Request):
-    return _page_response(request, "pages/portfolio.html", {
-        "request": request,
-        "page": "portfolio",
-        "portfolio": MOCK_PORTFOLIO,
-    })
+    """가상매매 페이지 — user별 격리. /my 와 동일하게 인증+서버환경 필요."""
+    denied = _auth_or_401(request)
+    if denied:
+        return denied
+    blocked = _block_local()
+    if blocked:
+        return blocked
+
+    user = get_current_user(request)
+    session = SessionLocal()
+    try:
+        setting = session.query(PortfolioSetting).filter(PortfolioSetting.owner == user).first()
+        has_setting = bool(setting and setting.initial_capital > 0)
+        return _page_response(request, "pages/portfolio.html", {
+            "request": request,
+            "page": "portfolio",
+            "has_setting": has_setting,
+            "initial_capital": setting.initial_capital if setting else 0,
+        })
+    finally:
+        session.close()
 
 
 @router.get("/settings", response_class=HTMLResponse)

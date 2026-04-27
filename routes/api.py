@@ -12,10 +12,14 @@ from config import (
     ACCOUNT_TYPE_NAMES, ACCOUNT_TYPE_MARKET, IS_LOCAL, get_logger,
 )
 from db.database import SessionLocal
-from db.models import Signal, ResearchTicker, ResearchHistory, RealAccount, RealHolding, RealTrade, RealQuickWatch
+from db.models import (
+    Signal, ResearchTicker, ResearchHistory,
+    RealAccount, RealHolding, RealTrade, RealQuickWatch,
+    Trade, PaperHolding, PortfolioSetting,
+)
 from analysis.llm import call_llm
 from routes.auth import reset_session, require_auth, logout, get_current_user, COOKIE_NAME
-from services import real_trader
+from services import real_trader, paper_trader
 
 router = APIRouter()
 logger = get_logger("api")
@@ -44,12 +48,6 @@ async def api_logout(request: Request):
     response.delete_cookie(COOKIE_NAME)
     logout(request)
     return response
-
-
-@router.post("/trade")
-async def create_trade():
-    """가상매매 주문 처리 (Phase 4에서 구현)"""
-    return {"status": "ok"}
 
 
 # ── 종목 검색 (자동완성) ──────────────────────────────────────
@@ -1040,7 +1038,7 @@ async def my_watch_list(request: Request):
         )
         return [{
             "id": r.id, "market": r.market, "ticker": r.ticker,
-            "ticker_name": r.ticker_name,
+            "ticker_name": r.ticker_name, "currency": r.currency or "KRW",
         } for r in rows]
     finally:
         session.close()
@@ -1055,11 +1053,19 @@ async def my_watch_create(request: Request):
     market = (body.get("market") or "").strip()
     ticker = (body.get("ticker") or "").strip()
     ticker_name = (body.get("ticker_name") or "").strip()
+    currency = (body.get("currency") or "KRW").strip().upper()
 
     if not market or not ticker:
         return JSONResponse(status_code=400, content={"error": "market, ticker required"})
     if market not in ("kr_stock", "us_stock", "crypto"):
         return JSONResponse(status_code=400, content={"error": "invalid market"})
+    if currency not in ("KRW", "USD"):
+        return JSONResponse(status_code=400, content={"error": "currency: KRW|USD"})
+    # 코인만 currency 의미 있음. 주식은 강제로 시장 통화 사용.
+    if market == "kr_stock":
+        currency = "KRW"
+    elif market == "us_stock":
+        currency = "USD"
 
     session = SessionLocal()
     try:
@@ -1067,6 +1073,7 @@ async def my_watch_create(request: Request):
             RealQuickWatch.owner == user,
             RealQuickWatch.market == market,
             RealQuickWatch.ticker == ticker,
+            RealQuickWatch.currency == currency,
         ).first()
         if exists:
             return JSONResponse(status_code=409, content={"error": "이미 등록됨"})
@@ -1077,7 +1084,7 @@ async def my_watch_create(request: Request):
 
         w = RealQuickWatch(
             owner=user, market=market, ticker=ticker,
-            ticker_name=ticker_name, sort_order=count,
+            ticker_name=ticker_name, currency=currency, sort_order=count,
         )
         session.add(w)
         session.commit()
@@ -1228,20 +1235,25 @@ async def my_refresh_prices(request: Request):
         )
         watch_items = [{
             "id": w.id, "market": w.market, "ticker": w.ticker,
-            "ticker_name": w.ticker_name,
+            "ticker_name": w.ticker_name, "currency": (w.currency or "KRW"),
         } for w in watches]
     finally:
         session.close()
 
     # (market, currency) → tickers 그룹화 (보유 + 관심)
-    # 관심 종목은 KRW 기준 (코인은 Upbit)
+    # 관심: 주식은 시장통화 / 코인은 watch 항목의 currency (KRW=Upbit, USD=Binance)
     groups: dict[tuple[str, str], set] = {}
     for h in holdings:
         acc = accounts.get(h.account_id)
         ccy = acc.currency if acc else "KRW"
         groups.setdefault((h.market, ccy), set()).add(h.ticker)
     for w in watch_items:
-        groups.setdefault((w["market"], "KRW"), set()).add(w["ticker"])
+        wccy = w["currency"]
+        if w["market"] == "kr_stock":
+            wccy = "KRW"
+        elif w["market"] == "us_stock":
+            wccy = "USD"
+        groups.setdefault((w["market"], wccy), set()).add(w["ticker"])
 
     price_map: dict[tuple[str, str, str], dict] = {}
 
@@ -1275,18 +1287,25 @@ async def my_refresh_prices(request: Request):
         elif market == "crypto" and ccy == "KRW":
             tasks.append(crypto_krw_batch(tickers_list))
         elif market == "crypto":
+            # USD/USDT 모두 Binance 배치
             tasks.append(crypto_usdt_batch(tickers_list, ccy))
 
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    # 관심 종목 결과 빌드
+    # 관심 종목 결과 빌드 (currency 별 lookup)
     watch_out = []
     for w in watch_items:
-        info = price_map.get((w["ticker"], w["market"], "KRW"), {})
+        wccy = w["currency"]
+        if w["market"] == "kr_stock":
+            wccy = "KRW"
+        elif w["market"] == "us_stock":
+            wccy = "USD"
+        info = price_map.get((w["ticker"], w["market"], wccy), {})
         watch_out.append({
             "id": w["id"], "market": w["market"], "ticker": w["ticker"],
             "ticker_name": w["ticker_name"],
+            "currency": wccy,
             "price": info.get("price", 0),
             "change_pct": info.get("change_pct", 0),
         })
@@ -1367,5 +1386,381 @@ async def my_refresh_prices(request: Request):
         "by_account": by_account,
         "by_currency": by_currency,
         "watches": watch_out,
+        "fetched_at": datetime.now(KST).strftime("%H:%M:%S"),
+    }
+
+
+# ── 가상매매 (paper trading, user별 격리) ─────────────────────
+
+def _get_setting(session, owner: str) -> PortfolioSetting | None:
+    return session.query(PortfolioSetting).filter(PortfolioSetting.owner == owner).first()
+
+
+@router.get("/portfolio/state")
+async def portfolio_state(request: Request):
+    """초기 로드용. setting + holdings + 최근 거래내역."""
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    session = SessionLocal()
+    try:
+        setting = _get_setting(session, user)
+        holdings = session.query(PaperHolding).filter(PaperHolding.owner == user).all()
+        trades = (
+            session.query(Trade)
+            .filter(Trade.owner == user)
+            .order_by(Trade.executed_at.desc(), Trade.id.desc())
+            .limit(50).all()
+        )
+        return {
+            "initial_capital": setting.initial_capital if setting else 0,
+            "has_setting": bool(setting and setting.initial_capital > 0),
+            "holdings": [{
+                "id": h.id, "ticker": h.ticker, "ticker_name": h.ticker_name,
+                "market": h.market, "qty": h.qty,
+                "avg_cost": h.avg_cost, "avg_cost_krw": h.avg_cost_krw,
+                "realized_pnl": h.realized_pnl, "realized_pnl_krw": h.realized_pnl_krw,
+            } for h in holdings],
+            "trades": [{
+                "id": t.id, "ticker": t.ticker, "ticker_name": t.ticker_name,
+                "market": t.market, "broker": t.broker, "side": t.side,
+                "qty": t.qty, "price": t.price, "fee": t.fee, "tax": t.tax,
+                "fx_rate": t.fx_rate, "realized_pnl": t.realized_pnl,
+                "executed_at": t.executed_at.isoformat() if t.executed_at else "",
+                "memo": t.memo,
+            } for t in trades],
+            "brokers_by_market": paper_trader.BROKERS_BY_MARKET,
+        }
+    finally:
+        session.close()
+
+
+@router.post("/portfolio/init")
+async def portfolio_init(request: Request):
+    """시작자본 설정 (KRW). 처음 1회 또는 리셋 후."""
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    body = await request.json()
+    try:
+        capital = float(body.get("initial_capital") or 0)
+    except (TypeError, ValueError):
+        return JSONResponse(status_code=400, content={"error": "invalid capital"})
+    if capital <= 0:
+        return JSONResponse(status_code=400, content={"error": "0보다 커야 함"})
+
+    session = SessionLocal()
+    try:
+        s = _get_setting(session, user)
+        if s:
+            s.initial_capital = capital
+        else:
+            s = PortfolioSetting(owner=user, initial_capital=capital)
+            session.add(s)
+        session.commit()
+        return {"status": "ok", "initial_capital": capital}
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+@router.post("/portfolio/reset")
+async def portfolio_reset(request: Request):
+    """모든 거래/잔고 삭제. body.initial_capital 있으면 시작자본도 변경."""
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    body = await request.json()
+    new_cap = body.get("initial_capital")
+    try:
+        new_cap = float(new_cap) if new_cap not in (None, "") else None
+    except (TypeError, ValueError):
+        return JSONResponse(status_code=400, content={"error": "invalid capital"})
+
+    session = SessionLocal()
+    try:
+        paper_trader.reset_all(session, user)
+        if new_cap and new_cap > 0:
+            s = _get_setting(session, user)
+            if s:
+                s.initial_capital = new_cap
+            else:
+                session.add(PortfolioSetting(owner=user, initial_capital=new_cap))
+        session.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+def _parse_paper_body(body: dict) -> dict:
+    try:
+        ticker = (body.get("ticker") or "").strip()
+        ticker_name = (body.get("ticker_name") or "").strip()
+        market = (body.get("market") or "").strip()
+        broker = (body.get("broker") or "").strip()
+        side = (body.get("side") or "").strip()
+        qty = float(body.get("qty") or 0)
+        price = float(body.get("price") or 0)
+        fx_rate = float(body.get("fx_rate") or 1)
+        memo = (body.get("memo") or "").strip()
+    except (TypeError, ValueError):
+        raise ValueError("invalid body")
+
+    fee = body.get("fee")
+    tax = body.get("tax")
+    fee = float(fee) if fee not in (None, "") else None
+    tax = float(tax) if tax not in (None, "") else None
+
+    executed_at = None
+    if body.get("executed_at"):
+        try:
+            executed_at = datetime.fromisoformat(body["executed_at"])
+        except ValueError:
+            pass
+
+    if not ticker or side not in ("buy", "sell") or qty <= 0 or price <= 0:
+        raise ValueError("ticker/side/qty/price 필수")
+    if market not in paper_trader.MARKET_ACCOUNT_TYPE:
+        raise ValueError("invalid market")
+
+    return {
+        "ticker": ticker, "ticker_name": ticker_name, "market": market,
+        "broker": broker, "side": side, "qty": qty, "price": price,
+        "fx_rate": fx_rate, "fee": fee, "tax": tax,
+        "executed_at": executed_at, "memo": memo,
+    }
+
+
+@router.post("/portfolio/trade")
+async def portfolio_trade_create(request: Request):
+    """매수/매도 체결."""
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    body = await request.json()
+    try:
+        p = _parse_paper_body(body)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+    session = SessionLocal()
+    try:
+        s = _get_setting(session, user)
+        if not s or s.initial_capital <= 0:
+            return JSONResponse(status_code=400, content={"error": "시작자본 미설정"})
+
+        # 매수 시 가용현금 체크
+        if p["side"] == "buy":
+            cash = paper_trader.cash_balance_krw(session, user, s.initial_capital)
+            need_krw = (p["price"] * p["qty"] + (p["fee"] or 0)) * p["fx_rate"]
+            if p["fee"] is None:
+                auto_fee, _ = paper_trader.calc_fee_tax(p["broker"], p["market"], "buy", p["price"], p["qty"])
+                need_krw = (p["price"] * p["qty"] + auto_fee) * p["fx_rate"]
+            if need_krw > cash + 1e-6:
+                return JSONResponse(status_code=400, content={
+                    "error": f"가용 현금 부족: 필요 ₩{need_krw:,.0f} / 보유 ₩{cash:,.0f}"
+                })
+
+        trade = paper_trader.add_trade(
+            session, owner=user,
+            ticker=p["ticker"], ticker_name=p["ticker_name"],
+            market=p["market"], broker=p["broker"], side=p["side"],
+            qty=p["qty"], price=p["price"], fx_rate=p["fx_rate"],
+            fee=p["fee"], tax=p["tax"],
+            executed_at=p["executed_at"], memo=p["memo"],
+        )
+        session.commit()
+        return {
+            "id": trade.id, "fee": trade.fee, "tax": trade.tax,
+            "realized_pnl": trade.realized_pnl,
+        }
+    except ValueError as e:
+        session.rollback()
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception as e:
+        session.rollback()
+        logger.error(f"portfolio_trade_create: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+@router.delete("/portfolio/trade/{trade_id}")
+async def portfolio_trade_delete(request: Request, trade_id: int):
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    session = SessionLocal()
+    try:
+        t = session.query(Trade).filter(Trade.id == trade_id, Trade.owner == user).first()
+        if not t:
+            return JSONResponse(status_code=404, content={"error": "not found"})
+        paper_trader.delete_trade(session, user, trade_id)
+        session.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
+@router.get("/portfolio/fee-preview")
+async def portfolio_fee_preview(request: Request, broker: str, market: str, side: str, price: float, qty: float):
+    """수수료/세금 미리보기 (네이티브 통화). 인증만 체크."""
+    user, denied = _require_user(request)
+    if denied: return denied
+    if market not in paper_trader.MARKET_ACCOUNT_TYPE:
+        return JSONResponse(status_code=400, content={"error": "invalid market"})
+    if side not in ("buy", "sell"):
+        return JSONResponse(status_code=400, content={"error": "side: buy|sell"})
+    fee, tax = paper_trader.calc_fee_tax(broker, market, side, price, qty)
+    return {"fee": fee, "tax": tax}
+
+
+@router.get("/portfolio/refresh")
+async def portfolio_refresh(request: Request):
+    """가상매매 라이브 — 보유종목 현재가 + 평가/원금/현금/PnL 집계."""
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    session = SessionLocal()
+    try:
+        setting = _get_setting(session, user)
+        all_holdings = session.query(PaperHolding).filter(PaperHolding.owner == user).all()
+        recent_trades = (
+            session.query(Trade)
+            .filter(Trade.owner == user)
+            .order_by(Trade.executed_at.desc(), Trade.id.desc())
+            .limit(50).all()
+        )
+        cash = paper_trader.cash_balance_krw(session, user, setting.initial_capital) if setting else 0
+    finally:
+        session.close()
+
+    holdings_open = [h for h in all_holdings if h.qty > 0]
+    holdings_closed = [h for h in all_holdings if h.qty == 0 and h.realized_pnl_krw != 0]
+
+    # 시장별 그룹화 (us_stock 은 USD 시세 — fx 환산 필요)
+    groups: dict[str, set] = {}
+    for h in holdings_open:
+        groups.setdefault(h.market, set()).add(h.ticker)
+
+    price_map: dict[tuple[str, str], dict] = {}
+
+    async def kr_one(ticker: str):
+        data = await asyncio.to_thread(_fetch_price, ticker, "kr_stock")
+        price_map[(ticker, "kr_stock")] = data
+
+    async def us_one(ticker: str):
+        data = await asyncio.to_thread(_fetch_price, ticker, "us_stock")
+        price_map[(ticker, "us_stock")] = data
+
+    async def crypto_batch(tickers: list[str]):
+        data = await asyncio.to_thread(_fetch_upbit_prices_batch, tickers)
+        for tk, val in data.items():
+            price_map[(tk, "crypto")] = val
+
+    tasks = []
+    for market, tickers in groups.items():
+        tickers_list = list(tickers)
+        if market == "kr_stock":
+            for t in tickers_list:
+                tasks.append(kr_one(t))
+        elif market == "us_stock":
+            for t in tickers_list:
+                tasks.append(us_one(t))
+        elif market == "crypto":
+            tasks.append(crypto_batch(tickers_list))
+
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    # 클라이언트에서 받은 fx 사용 (보유 평가용 USD→KRW)
+    try:
+        fx = float(request.query_params.get("fx") or 0)
+    except ValueError:
+        fx = 0
+    if fx <= 0:
+        fx = 1400.0  # fallback
+
+    total_eval_krw = 0.0
+    total_cost_krw = 0.0
+    out_holdings = []
+
+    for h in holdings_open:
+        info = price_map.get((h.ticker, h.market), {})
+        cur = info.get("price", 0)
+        change_pct = info.get("change_pct", 0)
+
+        # KRW 환산 평가액
+        if h.market == "us_stock":
+            cur_krw = cur * fx
+        else:
+            cur_krw = cur
+
+        eval_krw = cur_krw * h.qty
+        cost_krw = h.avg_cost_krw * h.qty
+        unrealized_krw = eval_krw - cost_krw
+        unrealized_pct = (unrealized_krw / cost_krw * 100) if cost_krw > 0 else 0
+
+        total_eval_krw += eval_krw
+        total_cost_krw += cost_krw
+
+        out_holdings.append({
+            "id": h.id, "ticker": h.ticker, "ticker_name": h.ticker_name,
+            "market": h.market, "qty": h.qty,
+            "avg_cost": h.avg_cost, "avg_cost_krw": h.avg_cost_krw,
+            "current_price": cur, "current_price_krw": cur_krw,
+            "change_pct": change_pct,
+            "eval_krw": eval_krw, "cost_krw": cost_krw,
+            "unrealized_krw": unrealized_krw, "unrealized_pct": unrealized_pct,
+            "realized_pnl_krw": h.realized_pnl_krw,
+        })
+
+    realized_total_krw = sum(h.realized_pnl_krw for h in all_holdings)
+    total_asset_krw = total_eval_krw + cash
+    initial = setting.initial_capital if setting else 0
+    total_return_krw = total_asset_krw - initial
+    total_return_pct = (total_return_krw / initial * 100) if initial > 0 else 0
+
+    # 시장별 비중
+    by_market: dict[str, float] = {}
+    for h in out_holdings:
+        by_market[h["market"]] = by_market.get(h["market"], 0) + h["eval_krw"]
+
+    closed_out = [{
+        "id": h.id, "ticker": h.ticker, "ticker_name": h.ticker_name,
+        "market": h.market, "realized_pnl_krw": h.realized_pnl_krw,
+    } for h in holdings_closed]
+
+    trade_out = [{
+        "id": t.id, "ticker": t.ticker, "ticker_name": t.ticker_name,
+        "market": t.market, "broker": t.broker, "side": t.side,
+        "qty": t.qty, "price": t.price, "fee": t.fee, "tax": t.tax,
+        "fx_rate": t.fx_rate, "realized_pnl": t.realized_pnl,
+        "executed_at": t.executed_at.strftime("%Y-%m-%d %H:%M") if t.executed_at else "",
+        "memo": t.memo,
+    } for t in recent_trades]
+
+    return {
+        "initial_capital": initial,
+        "cash": cash,
+        "total_eval_krw": total_eval_krw,
+        "total_cost_krw": total_cost_krw,
+        "total_asset_krw": total_asset_krw,
+        "total_return_krw": total_return_krw,
+        "total_return_pct": total_return_pct,
+        "unrealized_krw": total_eval_krw - total_cost_krw,
+        "realized_krw": realized_total_krw,
+        "by_market": by_market,
+        "holdings": out_holdings,
+        "closed": closed_out,
+        "trades": trade_out,
         "fetched_at": datetime.now(KST).strftime("%H:%M:%S"),
     }

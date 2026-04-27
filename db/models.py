@@ -128,25 +128,57 @@ class ResearchHistory(Base):
 
 
 class Trade(Base):
-    """가상매매 거래 내역"""
+    """가상매매 거래 내역 (user별). 가격은 네이티브 통화(USD for us_stock, KRW otherwise),
+    fx_rate 는 거래 시점 KRW per native unit."""
     __tablename__ = "trades"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    ticker: Mapped[str] = mapped_column(String(20), index=True)
-    market: Mapped[str] = mapped_column(String(10))          # "stock" | "crypto"
-    side: Mapped[str] = mapped_column(String(4))              # "buy" | "sell"
-    quantity: Mapped[float] = mapped_column(Float)
-    price: Mapped[float] = mapped_column(Float)
-    fee: Mapped[float] = mapped_column(Float, default=0.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
+    owner: Mapped[str] = mapped_column(String(30), index=True, default="")
+    ticker: Mapped[str] = mapped_column(String(30), index=True)
+    ticker_name: Mapped[str] = mapped_column(String(100), default="")
+    market: Mapped[str] = mapped_column(String(10))          # kr_stock/us_stock/crypto
+    side: Mapped[str] = mapped_column(String(10))            # buy/sell
+    qty: Mapped[float] = mapped_column(Float)
+    price: Mapped[float] = mapped_column(Float)              # native
+    fee: Mapped[float] = mapped_column(Float, default=0.0)   # native
+    tax: Mapped[float] = mapped_column(Float, default=0.0)   # native
+    fx_rate: Mapped[float] = mapped_column(Float, default=1.0)
+    realized_pnl: Mapped[float] = mapped_column(Float, default=0.0)  # native
+    broker: Mapped[str] = mapped_column(String(20), default="")
+    executed_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst, index=True)
+    memo: Mapped[str] = mapped_column(String(200), default="")
+
+
+class PaperHolding(Base):
+    """가상매매 잔고 캐시 (user별)."""
+    __tablename__ = "paper_holdings"
+    __table_args__ = (
+        UniqueConstraint("owner", "ticker", "market", name="uq_paper_holding"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner: Mapped[str] = mapped_column(String(30), index=True, default="")
+    ticker: Mapped[str] = mapped_column(String(30), index=True)
+    ticker_name: Mapped[str] = mapped_column(String(100), default="")
+    market: Mapped[str] = mapped_column(String(10))
+    qty: Mapped[float] = mapped_column(Float, default=0.0)
+    avg_cost: Mapped[float] = mapped_column(Float, default=0.0)        # native
+    avg_cost_krw: Mapped[float] = mapped_column(Float, default=0.0)    # KRW (fx 가중평균 포함)
+    realized_pnl: Mapped[float] = mapped_column(Float, default=0.0)    # native
+    realized_pnl_krw: Mapped[float] = mapped_column(Float, default=0.0)  # KRW
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
 
 
 class PortfolioSetting(Base):
-    """포트폴리오 설정"""
+    """가상매매 설정 (user별 1행)"""
     __tablename__ = "portfolio_settings"
+    __table_args__ = (
+        UniqueConstraint("owner", name="uq_portfolio_setting_owner"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    initial_capital: Mapped[float] = mapped_column(Float, default=100_000_000)
+    owner: Mapped[str] = mapped_column(String(30), index=True, default="")
+    initial_capital: Mapped[float] = mapped_column(Float, default=0)  # KRW
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)
 
 
@@ -209,7 +241,7 @@ class RealQuickWatch(Base):
     """관심 종목 — 보유와 별개로 현재가/등락률만 보는 용도"""
     __tablename__ = "real_quick_watch"
     __table_args__ = (
-        UniqueConstraint("owner", "market", "ticker", name="uq_real_quick_watch"),
+        UniqueConstraint("owner", "market", "ticker", "currency", name="uq_real_quick_watch"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -217,5 +249,6 @@ class RealQuickWatch(Base):
     market: Mapped[str] = mapped_column(String(10))             # kr_stock/us_stock/crypto
     ticker: Mapped[str] = mapped_column(String(30))
     ticker_name: Mapped[str] = mapped_column(String(100), default="")
+    currency: Mapped[str] = mapped_column(String(10), default="KRW")  # KRW/USD (코인만 의미 있음)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_kst)

@@ -632,6 +632,13 @@
                 <button data-market="us_stock" class="seg-btn text-muted hover:text-white">미국</button>
                 <button data-market="crypto" class="seg-btn text-muted hover:text-white">코인</button>
             </div>
+
+            <!-- 코인 통화 선택 (코인 모드에서만 노출) -->
+            <div id="w-currency-row" class="hidden grid grid-cols-2 gap-1.5 p-1 bg-elevated rounded-xl mb-3">
+                <button type="button" data-cur="KRW" class="seg-btn bg-toss text-white">₩ 원화 (Upbit)</button>
+                <button type="button" data-cur="USD" class="seg-btn text-muted hover:text-white">$ 달러 (Binance)</button>
+            </div>
+
             <div class="relative">
                 <input type="text" id="w-search" autocomplete="off" placeholder="종목명 또는 코드 검색" class="my-input pl-9">
                 <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1599,14 +1606,14 @@ var lastWatchPrices = {};
 var watchSortable = null;
 
 var MARKET_LABEL = { kr_stock: '한국', us_stock: '미국', crypto: '코인' };
-var MARKET_CCY = { kr_stock: '₩', us_stock: '$', crypto: '₩' };
 
-function _watchPriceFmt(market, price) {
-    var sym = MARKET_CCY[market] || '';
-    if (market === 'us_stock') {
-        return sym + (price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function _watchPriceFmt(market, price, currency) {
+    // currency 가 명시되면 그것 우선, 없으면 시장 기본값
+    var ccy = currency || (market === 'us_stock' ? 'USD' : 'KRW');
+    if (ccy === 'USD') {
+        return '$' + (price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
     }
-    return sym + fmtMoney(price);
+    return '₩' + fmtMoney(price);
 }
 
 function renderWatchList(items) {
@@ -1623,6 +1630,11 @@ function renderWatchList(items) {
         var changePct = +it.change_pct || 0;
         var color = changePct > 0 ? 'text-[#F04452]' : (changePct < 0 ? 'text-toss' : 'text-muted');
         var sign = changePct > 0 ? '+' : '';
+        var ccy = it.currency || (it.market === 'us_stock' ? 'USD' : 'KRW');
+        // 코인 항목에서만 통화 배지 노출 (KRW/USD 둘 다 있을 수 있어서 구분 필요)
+        var ccyBadge = (it.market === 'crypto')
+            ? '<span class="text-[9px] font-semibold px-1 py-0.5 rounded bg-elevated/60 text-muted shrink-0">' + ccy + '</span>'
+            : '';
 
         var row = document.createElement('div');
         row.className = 'group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-elevated/40 transition-colors';
@@ -1634,20 +1646,21 @@ function renderWatchList(items) {
                 '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>' +
             '</button>' +
             '<span class="text-[9px] font-semibold w-7 text-center py-0.5 rounded bg-elevated text-muted shrink-0">' + (MARKET_LABEL[it.market] || it.market) + '</span>' +
+            ccyBadge +
             '<div class="min-w-0 flex-1 leading-tight">' +
                 '<p class="text-sm font-semibold text-white truncate">' + (it.ticker_name || it.ticker) + '</p>' +
                 '<p class="text-[10px] text-muted truncate">' + it.ticker + '</p>' +
             '</div>' +
             '<div class="text-right shrink-0 leading-tight tabular-nums">' +
-                '<p class="text-sm font-semibold text-white" data-watch-price>' + (it.price ? _watchPriceFmt(it.market, it.price) : '—') + '</p>' +
+                '<p class="text-sm font-semibold text-white" data-watch-price>' + (it.price ? _watchPriceFmt(it.market, it.price, ccy) : '—') + '</p>' +
                 '<p class="text-[11px] font-medium ' + color + '" data-watch-change>' + (it.price ? sign + changePct.toFixed(2) + '%' : '—') + '</p>' +
             '</div>' +
             '<button onclick="deleteWatch(' + it.id + ')" class="text-muted/40 hover:text-[#F04452] opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-1" title="삭제">' +
                 '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M6 18L18 6M6 6l12 12"/></svg>' +
             '</button>';
 
-        // flash on price change
-        var key = it.market + ':' + it.ticker;
+        // flash on price change (통화별로도 분리)
+        var key = it.market + ':' + it.ticker + ':' + ccy;
         var prev = lastWatchPrices[key];
         if (prev !== undefined && it.price && prev !== it.price) {
             var priceEl = row.querySelector('[data-watch-price]');
@@ -1685,6 +1698,7 @@ function renderWatchList(items) {
 // ───── 관심 종목 추가 모달 ─────
 var wSearchTimer = null;
 var wMarket = '';
+var wCurrency = 'KRW';  // 코인 모드 전용
 
 function openWatchModal() {
     document.getElementById('watch-modal').classList.remove('hidden');
@@ -1706,12 +1720,35 @@ function _setWatchMarket(m) {
     var active = seg.querySelector('[data-market="' + m + '"]');
     active.classList.remove('text-muted');
     active.classList.add('bg-toss', 'text-white');
+    // 코인일 때만 통화 토글 노출
+    var crow = document.getElementById('w-currency-row');
+    if (m === 'crypto') {
+        crow.classList.remove('hidden');
+        crow.classList.add('grid');
+    } else {
+        crow.classList.add('hidden');
+        crow.classList.remove('grid');
+    }
     // 검색어 있으면 재검색
     var q = document.getElementById('w-search').value.trim();
     if (q) _doWatchSearch(q);
 }
+function _setWatchCurrency(c) {
+    wCurrency = c;
+    var row = document.getElementById('w-currency-row');
+    row.querySelectorAll('button').forEach(function(b) {
+        b.classList.remove('bg-toss', 'text-white');
+        b.classList.add('text-muted');
+    });
+    var active = row.querySelector('[data-cur="' + c + '"]');
+    active.classList.remove('text-muted');
+    active.classList.add('bg-toss', 'text-white');
+}
 document.querySelectorAll('#w-market-seg [data-market]').forEach(function(b) {
     b.addEventListener('click', function() { _setWatchMarket(b.dataset.market); });
+});
+document.querySelectorAll('#w-currency-row [data-cur]').forEach(function(b) {
+    b.addEventListener('click', function() { _setWatchCurrency(b.dataset.cur); });
 });
 
 function _doWatchSearch(q) {
@@ -1752,10 +1789,13 @@ document.getElementById('w-search').addEventListener('input', function(e) {
 function addWatch(ticker, name, market) {
     var err = document.getElementById('w-error');
     err.classList.add('hidden');
+    // 코인이면 모달에서 선택된 통화 사용, 아니면 시장 기본값
+    var ccy = (market === 'crypto') ? wCurrency :
+              (market === 'us_stock' ? 'USD' : 'KRW');
     fetch('/api/my/watch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ market: market, ticker: ticker, ticker_name: name }),
+        body: JSON.stringify({ market: market, ticker: ticker, ticker_name: name, currency: ccy }),
     })
     .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
     .then(function(res) {

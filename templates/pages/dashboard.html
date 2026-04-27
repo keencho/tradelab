@@ -1,23 +1,58 @@
 {% extends "base.html" %}
 {% block title_suffix %} — Dashboard{% endblock %}
 
+{% block head_extra %}
+<style>
+    .hero-grad {
+        background:
+            radial-gradient(circle at 20% 0%, rgba(49,130,246,.18) 0%, transparent 45%),
+            radial-gradient(circle at 80% 100%, rgba(240,68,82,.10) 0%, transparent 45%),
+            #212226;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<!-- 메트릭 카드 -->
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-8">
-    <div class="bg-surface rounded-card p-4 lg:p-5">
-        <p class="text-xs text-muted mb-1">총 자산</p>
-        <p class="text-xl lg:text-2xl font-bold text-white">₩{{ "{:,.0f}".format(portfolio.total_asset) }}</p>
-        <p class="text-sm mt-1 text-[#F04452]">+{{ portfolio.total_pnl_pct }}%</p>
+
+{% if show_assets %}
+<!-- ─────── 자산 요약 (실투자 기반) ─────── -->
+<div id="asset-section" class="hero-grad rounded-card p-4 lg:p-6 mb-6 hidden">
+    <div class="flex items-center justify-between mb-4">
+        <div>
+            <p class="text-[11px] text-muted uppercase tracking-wider">총 자산</p>
+            <p id="d-total" class="text-2xl lg:text-3xl font-bold text-white tabular-nums mt-1">—</p>
+            <p id="d-pnl" class="text-xs tabular-nums mt-0.5">—</p>
+        </div>
+        <a href="/my" class="text-xs text-toss hover:underline shrink-0">내 자산 →</a>
     </div>
-    <div class="bg-surface rounded-card p-4 lg:p-5">
-        <p class="text-xs text-muted mb-1">일일 손익</p>
-        <p class="text-xl lg:text-2xl font-bold text-[#F04452]">+₩{{ "{:,.0f}".format(portfolio.daily_pnl) }}</p>
-        <p class="text-sm mt-1 text-[#F04452]">+{{ portfolio.daily_pnl_pct }}%</p>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="bg-elevated/40 rounded-xl px-3 py-2.5">
+            <p class="text-[10px] text-muted uppercase tracking-wider">총 원금</p>
+            <p id="d-cost" class="text-sm lg:text-base font-bold text-white tabular-nums mt-0.5">—</p>
+        </div>
+        <div class="bg-elevated/40 rounded-xl px-3 py-2.5">
+            <p class="text-[10px] text-muted uppercase tracking-wider">평가손익</p>
+            <p id="d-unrealized" class="text-sm lg:text-base font-bold tabular-nums mt-0.5">—</p>
+        </div>
+        <div class="bg-elevated/40 rounded-xl px-3 py-2.5">
+            <p class="text-[10px] text-muted uppercase tracking-wider">누적 실현</p>
+            <p id="d-realized" class="text-sm lg:text-base font-bold tabular-nums mt-0.5">—</p>
+        </div>
+        <div class="bg-elevated/40 rounded-xl px-3 py-2.5">
+            <p class="text-[10px] text-muted uppercase tracking-wider">시장 비중</p>
+            <p id="d-mix" class="text-xs text-white tabular-nums mt-0.5 truncate">—</p>
+        </div>
     </div>
+</div>
+{% endif %}
+
+<!-- ─────── 메트릭 카드 (시그널/뉴스만) ─────── -->
+<div class="grid grid-cols-2 gap-3 lg:gap-4 mb-8">
     <div class="bg-surface rounded-card p-4 lg:p-5">
-        <p class="text-xs text-muted mb-1">활성 시그널</p>
-        <p class="text-xl lg:text-2xl font-bold text-white">{{ signals|length }}</p>
-        <p class="text-sm mt-1 text-muted">3 bullish · 2 bearish</p>
+        <p class="text-xs text-muted mb-1">최근 시그널</p>
+        <p class="text-xl lg:text-2xl font-bold text-white">{{ signal_stats.total }}</p>
+        <p class="text-sm mt-1 text-muted">{{ signal_stats.bullish }} bullish · {{ signal_stats.bearish }} bearish</p>
     </div>
     <div class="bg-surface rounded-card p-4 lg:p-5">
         <p class="text-xs text-muted mb-1">수집 뉴스</p>
@@ -26,21 +61,8 @@
     </div>
 </div>
 
-<!-- 수익률 차트 -->
-<div class="bg-surface rounded-card p-4 lg:p-5 mb-8">
-    <div class="flex items-center justify-between mb-4">
-        <h2 class="text-sm font-semibold text-white">포트폴리오 수익률</h2>
-        <div class="flex gap-3 text-xs">
-            <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 bg-toss rounded"></span><span class="hidden sm:inline">내 포트폴리오</span><span class="sm:hidden">포트폴리오</span></span>
-            <span class="flex items-center gap-1.5 text-muted"><span class="w-3 h-0.5 bg-muted rounded"></span>벤치마크</span>
-        </div>
-    </div>
-    <div id="portfolio-chart" style="height: 240px;"></div>
-</div>
-
-<!-- 시그널 + 뉴스 -->
+<!-- ─────── 시그널 + 뉴스 ─────── -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    <!-- 최근 시그널 -->
     <div class="bg-surface rounded-card p-4 lg:p-5">
         <div class="flex items-center justify-between mb-4">
             <h2 class="text-sm font-semibold text-white">최근 시그널</h2>
@@ -59,7 +81,7 @@
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2">
                         <span class="text-sm font-semibold text-white">{{ s.ticker }}</span>
-                        <span class="text-xs text-muted">{{ s.signal_type }}</span>
+                        <span class="text-xs text-muted">{{ s.signal_type|signal_type_kr }}</span>
                         <span class="ml-auto text-xs text-muted">{{ s.created_at.strftime('%m/%d %H:%M') }}</span>
                     </div>
                     <p class="text-xs text-muted mt-1 truncate">{{ s.description }}</p>
@@ -78,7 +100,6 @@
         </div>
     </div>
 
-    <!-- 최근 뉴스 -->
     <div class="bg-surface rounded-card p-4 lg:p-5">
         <div class="flex items-center justify-between mb-4">
             <h2 class="text-sm font-semibold text-white">최근 뉴스</h2>
@@ -108,36 +129,79 @@
     </div>
 </div>
 
+{% if show_assets %}
 <script>
-    var chartData = {{ chart | tojson }};
-    Plotly.newPlot('portfolio-chart', [
-        {
-            x: chartData.dates,
-            y: chartData.portfolio,
-            name: '내 포트폴리오',
-            type: 'scatter',
-            mode: 'lines',
-            line: { color: '#3182F6', width: 2 },
-            fill: 'tozeroy',
-            fillcolor: 'rgba(49, 130, 246, 0.06)',
-        },
-        {
-            x: chartData.dates,
-            y: chartData.benchmark,
-            name: '벤치마크',
-            type: 'scatter',
-            mode: 'lines',
-            line: { color: '#8B95A1', width: 1.5, dash: 'dot' },
-        }
-    ], {
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        font: { family: 'Pretendard', color: '#8B95A1', size: 11 },
-        margin: { l: 40, r: 20, t: 10, b: 30 },
-        xaxis: { gridcolor: '#2C2D33', showgrid: true },
-        yaxis: { gridcolor: '#2C2D33', showgrid: true, tickprefix: '₩', tickformat: ',.0f', ticksuffix: 'M' },
-        showlegend: false,
-        hovermode: 'x unified',
-    }, { responsive: true, displayModeBar: false });
+// 자산 영역 — /api/my/refresh 비동기 호출 + 환율은 localStorage 재사용
+(function() {
+    var fx = parseFloat(localStorage.getItem('tl_fx_usd_krw')) || 1400;
+
+    function fmtKrw(n) {
+        if (n === null || n === undefined || isNaN(n)) return '—';
+        var sign = n < 0 ? '-' : '';
+        return sign + '₩' + Math.abs(n).toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+    }
+    function fmtPct(p) {
+        if (p === null || p === undefined || isNaN(p)) return '—';
+        return (p > 0 ? '+' : '') + p.toFixed(2) + '%';
+    }
+    function pnlColor(n) { return n > 0 ? 'text-[#F04452]' : (n < 0 ? 'text-toss' : 'text-muted'); }
+
+    var MARKET_LABEL = { kr_stock: '한국', us_stock: '미국', crypto: '코인' };
+
+    fetch('/api/my/refresh').then(function(r) { return r.json(); }).then(function(data) {
+        if (!data || data.error || !data.holdings) return;
+        var byCcy = data.by_currency || {};
+        var totalEvalKrw = 0, totalCostKrw = 0, totalUnreal = 0, totalRealized = 0;
+        Object.keys(byCcy).forEach(function(c) {
+            var rate = (c === 'USD' || c === 'USDT') ? fx : 1;
+            totalEvalKrw += (byCcy[c].eval || 0) * rate;
+            totalCostKrw += (byCcy[c].cost || 0) * rate;
+            totalUnreal  += (byCcy[c].unrealized || 0) * rate;
+            totalRealized += (byCcy[c].realized || 0) * rate;
+        });
+
+        // 종목 한 개도 없으면 영역 숨김
+        if (totalEvalKrw === 0 && totalCostKrw === 0 && totalRealized === 0) return;
+        document.getElementById('asset-section').classList.remove('hidden');
+
+        var pnlPct = totalCostKrw > 0 ? (totalUnreal / totalCostKrw * 100) : 0;
+        document.getElementById('d-total').textContent = fmtKrw(totalEvalKrw);
+        var pnlEl = document.getElementById('d-pnl');
+        pnlEl.textContent = fmtKrw(totalUnreal) + ' (' + fmtPct(pnlPct) + ')';
+        pnlEl.className = 'text-xs tabular-nums mt-0.5 ' + pnlColor(totalUnreal);
+
+        document.getElementById('d-cost').textContent = fmtKrw(totalCostKrw);
+        var ue = document.getElementById('d-unrealized');
+        ue.textContent = fmtKrw(totalUnreal);
+        ue.className = 'text-sm lg:text-base font-bold tabular-nums mt-0.5 ' + pnlColor(totalUnreal);
+        var re = document.getElementById('d-realized');
+        re.textContent = fmtKrw(totalRealized);
+        re.className = 'text-sm lg:text-base font-bold tabular-nums mt-0.5 ' + pnlColor(totalRealized);
+
+        // 시장별 비중 — 계좌 통화 룩업
+        var accCcy = {};
+        Object.keys(data.by_account || {}).forEach(function(aid) {
+            accCcy[aid] = (data.by_account[aid] || {}).currency || 'KRW';
+        });
+        var byMarket = {};
+        (data.holdings || []).forEach(function(h) {
+            if (h.is_hidden) return;
+            var ccy = accCcy[h.account_id] || 'KRW';
+            var rate = (ccy === 'USD' || ccy === 'USDT') ? fx : 1;
+            var krw = (h.eval_amount || 0) * rate;
+            byMarket[h.market] = (byMarket[h.market] || 0) + krw;
+        });
+        var totalMix = Object.keys(byMarket).reduce(function(s, k) { return s + byMarket[k]; }, 0);
+        var parts = [];
+        ['kr_stock', 'us_stock', 'crypto'].forEach(function(m) {
+            if (byMarket[m]) {
+                var pct = totalMix > 0 ? (byMarket[m] / totalMix * 100) : 0;
+                parts.push(MARKET_LABEL[m] + ' ' + pct.toFixed(0) + '%');
+            }
+        });
+        document.getElementById('d-mix').textContent = parts.length ? parts.join(' · ') : '—';
+    }).catch(function(e) { console.error('dashboard asset', e); });
+})();
 </script>
+{% endif %}
 {% endblock %}

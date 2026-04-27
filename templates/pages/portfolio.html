@@ -1,219 +1,903 @@
 {% extends "base.html" %}
 {% block title_suffix %} — Portfolio{% endblock %}
 
+{% block head_extra %}
+<style>
+    .hero-grad {
+        background:
+            radial-gradient(circle at 20% 0%, rgba(49,130,246,.18) 0%, transparent 45%),
+            radial-gradient(circle at 80% 100%, rgba(240,68,82,.10) 0%, transparent 45%),
+            #212226;
+    }
+    @keyframes flash-up { 0% { background: rgba(240,68,82,.18); } 100% { background: transparent; } }
+    @keyframes flash-down { 0% { background: rgba(49,130,246,.18); } 100% { background: transparent; } }
+    .flash-up { animation: flash-up .8s ease-out; }
+    .flash-down { animation: flash-down .8s ease-out; }
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+    .live-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin .9s linear infinite; }
+    @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .modal-in { animation: modal-in .18s ease-out; }
+    .holding-row:hover { background: rgba(49,130,246,.04); }
+    .seg-btn { padding: 10px; border-radius: 12px; font-size: 13px; font-weight: 600; transition: all .12s; cursor: pointer; }
+    .pf-input {
+        width: 100%; background: #2C2D33; border: 0; border-radius: 12px;
+        padding: 10px 12px; font-size: 14px; color: #F2F4F6; outline: none;
+        transition: box-shadow .12s;
+    }
+    .pf-input:focus { box-shadow: 0 0 0 2px rgba(49,130,246,.5); }
+    .pf-input::placeholder { color: #8B95A1; }
+    .row-action-btn {
+        opacity: 0; transition: opacity .15s ease;
+        color: #8B95A1; padding: 4px;
+    }
+    .holding-row:hover .row-action-btn,
+    .trade-row:hover .row-action-btn { opacity: 1; }
+    .row-action-btn:hover { color: #F2F4F6; }
+</style>
+{% endblock %}
+
 {% block content %}
-<!-- 메트릭 카드 -->
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-8">
-    <div class="bg-surface rounded-card p-4 lg:p-5">
-        <p class="text-xs text-muted mb-1">총 자산</p>
-        <p class="text-xl lg:text-2xl font-bold text-white">₩{{ "{:,.0f}".format(portfolio.total_asset) }}</p>
+
+<!-- ─────── 헤더 (sticky) ─────── -->
+<div class="sticky -top-4 lg:-top-6 z-30 -mx-4 lg:-mx-6 -mt-4 lg:-mt-6 px-4 lg:px-6 pt-4 lg:pt-6 pb-3 mb-6 bg-ground border-b border-elevated/40 flex items-center justify-between flex-wrap gap-3">
+    <div>
+        <h2 class="text-xl lg:text-2xl font-bold text-white">가상매매</h2>
+        <p class="text-xs text-muted mt-0.5">시작자본 KRW · 현재가 즉시 체결</p>
     </div>
-    <div class="bg-surface rounded-card p-4 lg:p-5">
-        <p class="text-xs text-muted mb-1">현금</p>
-        <p class="text-xl lg:text-2xl font-bold text-white">₩{{ "{:,.0f}".format(portfolio.cash) }}</p>
-    </div>
-    <div class="bg-surface rounded-card p-4 lg:p-5">
-        <p class="text-xs text-muted mb-1">투자금</p>
-        <p class="text-xl lg:text-2xl font-bold text-white">₩{{ "{:,.0f}".format(portfolio.invested) }}</p>
-    </div>
-    <div class="bg-surface rounded-card p-4 lg:p-5">
-        <p class="text-xs text-muted mb-1">총 수익률</p>
-        <p class="text-xl lg:text-2xl font-bold text-[#F04452]">+{{ portfolio.total_pnl_pct }}%</p>
+    <div id="header-actions" class="flex items-center gap-1.5 lg:gap-2 flex-wrap" {% if not has_setting %}style="display:none"{% endif %}>
+        <button onclick="refreshNow()" id="refresh-btn"
+            class="h-9 px-2.5 lg:px-3 text-xs rounded-xl bg-toss text-white hover:bg-toss/90 transition-colors flex items-center gap-1.5 font-medium">
+            <svg id="refresh-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <span class="hidden sm:inline">새로고침</span>
+        </button>
+        <button onclick="toggleLive()" id="live-btn"
+            class="h-9 px-2.5 lg:px-3 text-xs rounded-xl bg-elevated text-muted hover:text-white transition-colors flex items-center gap-1.5 whitespace-nowrap">
+            <span id="live-dot" class="w-1.5 h-1.5 rounded-full bg-muted"></span>
+            <span id="live-label">OFF</span>
+        </button>
+        <div class="w-px h-6 bg-elevated mx-0.5 hidden sm:block"></div>
+        <button onclick="openTradeModal()"
+            class="h-9 px-2.5 lg:px-3 text-xs rounded-xl bg-elevated text-white hover:bg-elevated/70 transition-colors flex items-center gap-1.5 font-medium">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            <span class="hidden sm:inline">거래</span>
+        </button>
+        <button onclick="openResetModal()"
+            class="h-9 px-2.5 lg:px-3 text-xs rounded-xl bg-elevated text-muted hover:text-white transition-colors flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/>
+            </svg>
+            <span class="hidden sm:inline">리셋</span>
+        </button>
     </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+<!-- ─────── 시작자본 미설정 (empty state) ─────── -->
+<div id="setup-screen" class="{% if has_setting %}hidden{% endif %}">
+    <div class="max-w-md mx-auto bg-surface rounded-card p-6 lg:p-8 mt-8 lg:mt-16">
+        <h3 class="text-lg font-semibold text-white mb-2">시작자본 설정</h3>
+        <p class="text-xs text-muted mb-6">가상매매는 KRW 단일 통화로 진행됩니다.<br/>시작 자본을 입력하면 거래 시뮬레이션이 시작됩니다.</p>
+
+        <label class="text-xs text-muted block mb-1.5">시작 자본 (KRW)</label>
+        <input id="setup-capital" type="number" inputmode="numeric" placeholder="예: 100000000"
+            class="pf-input mb-3" value="100000000">
+        <p class="text-[11px] text-muted mb-5">현재 입력값: <span id="setup-capital-fmt" class="text-white font-medium">₩100,000,000</span></p>
+        <button onclick="submitInit()"
+            class="w-full h-11 rounded-xl bg-toss text-white font-semibold text-sm hover:bg-toss/90 transition-colors">
+            시작하기
+        </button>
+    </div>
+</div>
+
+<!-- ─────── 메인 ─────── -->
+<div id="main-screen" class="{% if not has_setting %}hidden{% endif %}">
+
+    <!-- Hero 합산 카드 -->
+    <div class="hero-grad rounded-card p-4 lg:p-7 mb-5">
+        <div class="flex flex-col lg:flex-row lg:flex-wrap items-stretch lg:items-start lg:justify-between mb-4 gap-3 lg:gap-4">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-x-3 lg:gap-x-6 gap-y-3 min-w-0 w-full lg:flex-1 order-2 lg:order-1">
+                <div class="min-w-0">
+                    <p class="text-[10px] lg:text-[11px] text-muted uppercase tracking-wider">총 자산 <span class="text-muted/70">(KRW)</span></p>
+                    <p id="hero-total" class="text-base lg:text-2xl font-bold text-white mt-1 tabular-nums whitespace-nowrap">—</p>
+                    <p id="hero-return" class="text-[11px] tabular-nums">—</p>
+                </div>
+                <div class="min-w-0">
+                    <p class="text-[10px] lg:text-[11px] text-muted uppercase tracking-wider">가용 현금 <span class="text-muted/70">(KRW)</span></p>
+                    <p id="hero-cash" class="text-base lg:text-2xl font-bold text-white mt-1 tabular-nums whitespace-nowrap">—</p>
+                    <p class="text-[11px] text-muted">시작 ₩<span id="hero-initial">—</span></p>
+                </div>
+                <div class="min-w-0">
+                    <p class="text-[10px] lg:text-[11px] text-muted uppercase tracking-wider">평가손익 <span class="text-muted/70">(미실현)</span></p>
+                    <p id="hero-unrealized" class="text-base lg:text-2xl font-bold tabular-nums mt-1 whitespace-nowrap">—</p>
+                    <p id="hero-unrealized-pct" class="text-[11px] tabular-nums">—</p>
+                </div>
+                <div class="min-w-0">
+                    <p class="text-[10px] lg:text-[11px] text-muted uppercase tracking-wider">누적 실현 <span class="text-muted/70">(KRW)</span></p>
+                    <p id="hero-realized" class="text-base lg:text-2xl font-bold tabular-nums mt-1 whitespace-nowrap">—</p>
+                    <p class="text-[11px] text-muted">매도 합산</p>
+                </div>
+                <div class="col-span-2 lg:col-span-4">
+                    <p id="hero-breakdown" class="text-xs text-muted">새로고침을 눌러주세요</p>
+                </div>
+            </div>
+            <div class="flex items-stretch lg:items-start gap-2 order-1 lg:order-2 w-full lg:w-auto">
+                <div class="rounded-xl bg-elevated/50 border border-elevated px-3 py-2 flex items-center gap-2 flex-1 lg:flex-none">
+                    <div class="text-[11px]">
+                        <p class="text-muted uppercase tracking-wider">환율</p>
+                        <p class="text-white font-semibold tabular-nums">1 USD = ₩<span id="fx-display">—</span></p>
+                    </div>
+                </div>
+                <div class="rounded-xl bg-elevated/30 px-3 py-2 text-right flex-1 lg:flex-none">
+                    <p class="text-[11px] text-muted uppercase tracking-wider">갱신</p>
+                    <p id="hero-fetched" class="text-xs text-white font-medium mt-0.5">—</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 보유 포지션 -->
-    <div class="lg:col-span-2 bg-surface rounded-card p-4 lg:p-5">
-        <h2 class="text-sm font-semibold text-white mb-4">보유 포지션</h2>
+    <div class="bg-surface rounded-card p-4 lg:p-5 mb-5">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-semibold text-white">보유 포지션 <span id="holdings-count" class="text-xs text-muted ml-1.5">0</span></h3>
+            <button onclick="openTradeModal()" class="text-xs text-toss hover:underline">+ 거래</button>
+        </div>
 
         <!-- 데스크탑 테이블 -->
-        <table class="w-full hidden lg:table">
-            <thead>
-                <tr class="text-xs text-muted border-b border-elevated">
-                    <th class="text-left pb-3 font-medium">종목</th>
-                    <th class="text-right pb-3 font-medium">수량</th>
-                    <th class="text-right pb-3 font-medium">평균단가</th>
-                    <th class="text-right pb-3 font-medium">현재가</th>
-                    <th class="text-right pb-3 font-medium">손익</th>
-                    <th class="text-right pb-3 font-medium">수익률</th>
-                    <th class="text-right pb-3 font-medium">비중</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for p in portfolio.positions %}
-                <tr class="border-b border-elevated/50 hover:bg-elevated/50 transition-colors">
-                    <td class="py-3">
-                        <div class="flex items-center gap-2">
-                            <span class="text-sm font-semibold text-white">{{ p.ticker }}</span>
-                            <span class="text-xs px-1.5 py-0.5 rounded-lg
-                                {% if p.market == 'crypto' %}bg-[#FF9F00]/10 text-[#FF9F00]
-                                {% else %}bg-toss/10 text-toss{% endif %}">
-                                {{ p.market }}
-                            </span>
-                        </div>
-                    </td>
-                    <td class="py-3 text-right text-sm text-muted">{{ p.qty }}</td>
-                    <td class="py-3 text-right text-sm text-muted">{{ "{:,.2f}".format(p.avg_price) }}</td>
-                    <td class="py-3 text-right text-sm text-white font-medium">{{ "{:,.2f}".format(p.current_price) }}</td>
-                    <td class="py-3 text-right text-sm font-medium
-                        {% if p.pnl_amount >= 0 %}text-[#F04452]{% else %}text-toss{% endif %}">
-                        {{ "{:+,.0f}".format(p.pnl_amount) }}
-                    </td>
-                    <td class="py-3 text-right text-sm font-medium
-                        {% if p.pnl_pct >= 0 %}text-[#F04452]{% else %}text-toss{% endif %}">
-                        {{ "{:+.2f}".format(p.pnl_pct) }}%
-                    </td>
-                    <td class="py-3 text-right">
-                        <div class="flex items-center justify-end gap-2">
-                            <div class="w-16 h-1.5 bg-elevated rounded-full overflow-hidden">
-                                <div class="h-full bg-toss/60 rounded-full" style="width: {{ p.weight }}%"></div>
-                            </div>
-                            <span class="text-xs text-muted w-10 text-right">{{ p.weight }}%</span>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="hidden lg:block overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="text-xs text-muted border-b border-elevated">
+                        <th class="text-left pb-3 font-medium">종목</th>
+                        <th class="text-right pb-3 font-medium">수량</th>
+                        <th class="text-right pb-3 font-medium">평단</th>
+                        <th class="text-right pb-3 font-medium">현재가</th>
+                        <th class="text-right pb-3 font-medium">평가액 (KRW)</th>
+                        <th class="text-right pb-3 font-medium">손익 (KRW)</th>
+                        <th class="text-right pb-3 font-medium">수익률</th>
+                        <th class="text-right pb-3 font-medium">비중</th>
+                        <th class="w-8"></th>
+                    </tr>
+                </thead>
+                <tbody id="holdings-tbody"></tbody>
+            </table>
+        </div>
 
         <!-- 모바일 카드 -->
-        <div class="space-y-2 lg:hidden">
-            {% for p in portfolio.positions %}
-            <div class="p-3 rounded-xl bg-elevated/50">
-                <div class="flex items-center justify-between mb-2">
-                    <div class="flex items-center gap-2">
-                        <span class="text-sm font-semibold text-white">{{ p.ticker }}</span>
-                        <span class="text-xs px-1.5 py-0.5 rounded-lg
-                            {% if p.market == 'crypto' %}bg-[#FF9F00]/10 text-[#FF9F00]
-                            {% else %}bg-toss/10 text-toss{% endif %}">
-                            {{ p.market }}
-                        </span>
-                    </div>
-                    <span class="text-sm font-bold
-                        {% if p.pnl_pct >= 0 %}text-[#F04452]{% else %}text-toss{% endif %}">
-                        {{ "{:+.2f}".format(p.pnl_pct) }}%
-                    </span>
-                </div>
-                <div class="grid grid-cols-3 gap-2 text-xs">
-                    <div>
-                        <span class="text-muted">수량</span>
-                        <p class="text-white">{{ p.qty }}</p>
-                    </div>
-                    <div>
-                        <span class="text-muted">현재가</span>
-                        <p class="text-white font-medium">{{ "{:,.0f}".format(p.current_price) }}</p>
-                    </div>
-                    <div class="text-right">
-                        <span class="text-muted">손익</span>
-                        <p class="font-medium {% if p.pnl_amount >= 0 %}text-[#F04452]{% else %}text-toss{% endif %}">
-                            {{ "{:+,.0f}".format(p.pnl_amount) }}
-                        </p>
-                    </div>
-                </div>
-                <div class="mt-2 flex items-center gap-2">
-                    <div class="flex-1 h-1.5 bg-elevated rounded-full overflow-hidden">
-                        <div class="h-full bg-toss/60 rounded-full" style="width: {{ p.weight }}%"></div>
-                    </div>
-                    <span class="text-xs text-muted">{{ p.weight }}%</span>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
+        <div id="holdings-mobile" class="space-y-2 lg:hidden"></div>
+
+        <p id="holdings-empty" class="hidden text-xs text-muted text-center py-8">보유 종목 없음. 우측 상단 거래 버튼으로 매수해보세요.</p>
     </div>
 
-    <!-- 매매 폼 -->
+    <!-- 청산 종목 (qty=0, 실현손익 있음) -->
+    <details id="closed-section" class="bg-surface rounded-card p-4 lg:p-5 mb-5 hidden">
+        <summary class="cursor-pointer flex items-center justify-between">
+            <span class="text-sm font-semibold text-white">청산 종목 <span id="closed-count" class="text-xs text-muted ml-1.5">0</span></span>
+            <span class="text-xs text-muted">실현손익만 합산</span>
+        </summary>
+        <div id="closed-list" class="mt-4 space-y-1.5"></div>
+    </details>
+
+    <!-- 거래 내역 -->
     <div class="bg-surface rounded-card p-4 lg:p-5">
-        <h2 class="text-sm font-semibold text-white mb-4">가상매매</h2>
-        <form class="space-y-4">
-            <div>
-                <label class="text-xs text-muted block mb-1.5">종목 코드</label>
-                <input type="text" placeholder="NVDA, BTC/USDT ..."
-                    class="w-full bg-elevated border-0 rounded-xl px-3 py-2.5 text-sm text-white placeholder-muted focus:ring-2 focus:ring-toss focus:outline-none">
-            </div>
-            <div>
-                <label class="text-xs text-muted block mb-1.5">수량</label>
-                <input type="number" placeholder="0"
-                    class="w-full bg-elevated border-0 rounded-xl px-3 py-2.5 text-sm text-white placeholder-muted focus:ring-2 focus:ring-toss focus:outline-none">
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <button type="button" class="w-full py-2.5 rounded-xl text-sm font-semibold bg-[#F04452] text-white hover:bg-[#F04452]/90 active:bg-[#F04452]/80 transition-colors">
-                    매수
-                </button>
-                <button type="button" class="w-full py-2.5 rounded-xl text-sm font-semibold bg-toss text-white hover:bg-toss/90 active:bg-toss/80 transition-colors">
-                    매도
-                </button>
-            </div>
-        </form>
-        <div class="mt-6 pt-4 border-t border-elevated">
-            <div class="flex justify-between text-sm">
-                <span class="text-muted">가용 현금</span>
-                <span class="text-white font-medium">₩{{ "{:,.0f}".format(portfolio.cash) }}</span>
-            </div>
+        <h3 class="text-sm font-semibold text-white mb-4">최근 거래 <span id="trades-count" class="text-xs text-muted ml-1.5">0</span></h3>
+
+        <div class="hidden lg:block overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="text-xs text-muted border-b border-elevated">
+                        <th class="text-left pb-3 font-medium">시간</th>
+                        <th class="text-left pb-3 font-medium">종목</th>
+                        <th class="text-left pb-3 font-medium">구분</th>
+                        <th class="text-right pb-3 font-medium">수량</th>
+                        <th class="text-right pb-3 font-medium">단가</th>
+                        <th class="text-right pb-3 font-medium">수수료/세</th>
+                        <th class="text-right pb-3 font-medium">실현손익</th>
+                        <th class="w-8"></th>
+                    </tr>
+                </thead>
+                <tbody id="trades-tbody"></tbody>
+            </table>
         </div>
+        <div id="trades-mobile" class="space-y-2 lg:hidden"></div>
+        <p id="trades-empty" class="hidden text-xs text-muted text-center py-8">거래 없음</p>
     </div>
 </div>
 
-<!-- 거래 히스토리 -->
-<div class="bg-surface rounded-card p-4 lg:p-5">
-    <h2 class="text-sm font-semibold text-white mb-4">거래 히스토리</h2>
 
-    <!-- 데스크탑 테이블 -->
-    <table class="w-full hidden lg:table">
-        <thead>
-            <tr class="text-xs text-muted border-b border-elevated">
-                <th class="text-left pb-3 font-medium">시간</th>
-                <th class="text-left pb-3 font-medium">종목</th>
-                <th class="text-left pb-3 font-medium">구분</th>
-                <th class="text-right pb-3 font-medium">수량</th>
-                <th class="text-right pb-3 font-medium">가격</th>
-                <th class="text-right pb-3 font-medium">수수료</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for t in portfolio.trades %}
-            <tr class="border-b border-elevated/50 hover:bg-elevated/50 transition-colors">
-                <td class="py-3 text-sm text-muted">{{ t.time }}</td>
-                <td class="py-3 text-sm text-white font-medium">{{ t.ticker }}</td>
-                <td class="py-3">
-                    {% if t.side == 'buy' %}
-                    <span class="text-xs px-2 py-0.5 rounded-lg bg-[#F04452]/10 text-[#F04452]">매수</span>
-                    {% else %}
-                    <span class="text-xs px-2 py-0.5 rounded-lg bg-toss/10 text-toss">매도</span>
-                    {% endif %}
-                </td>
-                <td class="py-3 text-right text-sm text-muted">{{ t.qty }}</td>
-                <td class="py-3 text-right text-sm text-white">{{ "{:,.2f}".format(t.price) }}</td>
-                <td class="py-3 text-right text-sm text-muted">₩{{ "{:,.0f}".format(t.fee) }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <!-- 모바일 카드 -->
-    <div class="space-y-2 lg:hidden">
-        {% for t in portfolio.trades %}
-        <div class="flex items-center gap-3 p-3 rounded-xl bg-elevated/50">
-            <div class="shrink-0">
-                {% if t.side == 'buy' %}
-                <span class="text-xs px-2 py-1 rounded-lg bg-[#F04452]/10 text-[#F04452] font-medium">매수</span>
-                {% else %}
-                <span class="text-xs px-2 py-1 rounded-lg bg-toss/10 text-toss font-medium">매도</span>
-                {% endif %}
+<!-- ─────── 거래 모달 ─────── -->
+<div id="trade-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end lg:items-center justify-center p-0 lg:p-4"
+    onmousedown="_modalDown(event, this)" onclick="_modalClick(event, this, closeTradeModal)">
+    <div class="modal-in bg-surface rounded-t-card lg:rounded-card w-full lg:w-[480px] max-h-[92vh] overflow-y-auto scroll-area" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
+        <div class="p-5 lg:p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-semibold text-white">거래 입력</h3>
+                <button onclick="closeTradeModal()" class="text-muted hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
             </div>
-            <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2">
-                    <span class="text-sm font-semibold text-white">{{ t.ticker }}</span>
-                    <span class="text-xs text-muted">{{ t.qty }}주</span>
+
+            <!-- Side -->
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <button id="side-buy" onclick="setSide('buy')" class="seg-btn bg-elevated text-muted">매수</button>
+                <button id="side-sell" onclick="setSide('sell')" class="seg-btn bg-elevated text-muted">매도</button>
+            </div>
+
+            <div class="space-y-3">
+                <!-- 종목 검색 -->
+                <div class="relative">
+                    <label class="text-xs text-muted block mb-1.5">종목</label>
+                    <input id="t-search" type="text" placeholder="종목명/티커 검색"
+                        class="pf-input"
+                        oninput="_searchTicker(this.value)"
+                        onfocus="_searchTicker(this.value)">
+                    <div id="t-search-results" class="hidden absolute left-0 right-0 top-full mt-1 bg-surface rounded-xl shadow-2xl z-50 max-h-60 scroll-area border border-elevated"></div>
+                    <div id="t-selected" class="hidden mt-2 px-3 py-2 rounded-xl bg-toss/10 border border-toss/20 flex items-center justify-between">
+                        <div class="min-w-0">
+                            <p id="t-selected-name" class="text-sm text-white font-medium truncate"></p>
+                            <p id="t-selected-meta" class="text-[11px] text-muted"></p>
+                        </div>
+                        <button onclick="clearSelection()" class="text-muted hover:text-white shrink-0 ml-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
                 </div>
-                <span class="text-xs text-muted">{{ t.time }}</span>
-            </div>
-            <div class="text-right shrink-0">
-                <p class="text-sm text-white">{{ "{:,.0f}".format(t.price) }}</p>
-                <p class="text-xs text-muted">₩{{ "{:,.0f}".format(t.fee) }}</p>
+
+                <!-- 브로커 (시장별 자동 노출) -->
+                <div id="broker-row" class="hidden">
+                    <label class="text-xs text-muted block mb-1.5">가상 브로커</label>
+                    <div id="broker-options" class="grid grid-cols-3 gap-1.5"></div>
+                </div>
+
+                <!-- 가격/수량 -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs text-muted block mb-1.5">단가 <span id="t-currency" class="text-muted/70"></span></label>
+                        <input id="t-price" type="number" step="any" placeholder="0" class="pf-input" oninput="updatePreview()">
+                    </div>
+                    <div>
+                        <label class="text-xs text-muted block mb-1.5">수량</label>
+                        <input id="t-qty" type="number" step="any" placeholder="0" class="pf-input" oninput="updatePreview()">
+                    </div>
+                </div>
+
+                <!-- 자동 단가 채우기 -->
+                <button type="button" onclick="fillCurrentPrice()" id="t-fill-btn"
+                    class="hidden w-full text-xs text-toss hover:text-white py-1.5 rounded bg-toss/5 hover:bg-toss/10 transition-colors">
+                    현재가로 자동 입력 <span id="t-fill-price" class="font-medium"></span>
+                </button>
+
+                <!-- 실행시각 -->
+                <div>
+                    <label class="text-xs text-muted block mb-1.5">실행 시각</label>
+                    <div class="flex gap-2">
+                        <input id="t-executed-at" type="datetime-local" class="pf-input flex-1">
+                        <button type="button" onclick="setExecNow()" class="px-3 rounded-xl bg-elevated text-xs text-muted hover:text-white">지금</button>
+                    </div>
+                </div>
+
+                <!-- 메모 -->
+                <div>
+                    <label class="text-xs text-muted block mb-1.5">메모 <span class="text-muted/70">(선택)</span></label>
+                    <input id="t-memo" type="text" maxlength="200" class="pf-input" placeholder="">
+                </div>
+
+                <!-- 미리보기 -->
+                <div id="t-preview" class="hidden rounded-xl bg-elevated/40 px-4 py-3 border border-elevated text-xs space-y-1.5">
+                    <div class="flex justify-between"><span class="text-muted">거래 금액</span><span id="pv-notional" class="text-white tabular-nums">—</span></div>
+                    <div class="flex justify-between"><span class="text-muted">수수료</span><span id="pv-fee" class="text-white tabular-nums">—</span></div>
+                    <div class="flex justify-between" id="pv-tax-row"><span class="text-muted">세금</span><span id="pv-tax" class="text-white tabular-nums">—</span></div>
+                    <div class="flex justify-between border-t border-elevated pt-1.5"><span class="text-muted">총액 (KRW)</span><span id="pv-total" class="text-white font-semibold tabular-nums">—</span></div>
+                    <div id="pv-cash-row" class="flex justify-between"><span class="text-muted">예상 잔고</span><span id="pv-cash" class="text-white tabular-nums">—</span></div>
+                </div>
+
+                <button onclick="submitTrade()" id="t-submit"
+                    class="w-full h-11 rounded-xl bg-toss text-white font-semibold text-sm hover:bg-toss/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled>
+                    체결
+                </button>
+
+                <p id="t-error" class="hidden text-xs text-[#F04452] text-center"></p>
             </div>
         </div>
-        {% endfor %}
     </div>
 </div>
+
+
+<!-- ─────── 리셋 모달 ─────── -->
+<div id="reset-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end lg:items-center justify-center p-0 lg:p-4"
+    onmousedown="_modalDown(event, this)" onclick="_modalClick(event, this, closeResetModal)">
+    <div class="modal-in bg-surface rounded-t-card lg:rounded-card w-full lg:w-[420px]" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
+        <div class="p-5 lg:p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-semibold text-white">포트폴리오 리셋</h3>
+                <button onclick="closeResetModal()" class="text-muted hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <p class="text-xs text-muted mb-4">모든 거래/잔고가 삭제됩니다. 시작자본을 새로 설정하거나 그대로 둘 수 있습니다.</p>
+            <label class="text-xs text-muted block mb-1.5">새 시작자본 (KRW) <span class="text-muted/70">— 비우면 기존 유지</span></label>
+            <input id="reset-capital" type="number" inputmode="numeric" placeholder="" class="pf-input mb-4">
+            <button onclick="submitReset()"
+                class="w-full h-11 rounded-xl bg-[#F04452] text-white font-semibold text-sm hover:bg-[#F04452]/90 transition-colors">
+                삭제하고 리셋
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<script>
+// ─── 공용 모달 헬퍼 ───
+function _modalDown(e, overlay) { overlay.dataset.downOnSelf = (e.target === overlay) ? '1' : '0'; }
+function _modalClick(e, overlay, closeFn) {
+    if (e.target === overlay && overlay.dataset.downOnSelf === '1') closeFn();
+}
+
+// ─── 상태 ───
+var STATE = {
+    initialCapital: {{ initial_capital|default(0) }},
+    hasSetting: {{ 'true' if has_setting else 'false' }},
+    brokersByMarket: { kr_stock: ['toss','samsung','kis'], us_stock: ['toss','samsung','kis'], crypto: ['upbit','bithumb','binance','bybit'] },
+    selectedTicker: null,  // {ticker, name, market}
+    side: 'buy',
+    fxRate: 1400,
+    cash: 0,
+    lastRefresh: null,
+};
+
+var BROKER_NAMES = { toss:'토스', samsung:'삼성', kis:'한투', upbit:'업비트', bithumb:'빗썸', binance:'바이낸스', bybit:'바이비트' };
+var MARKET_LABEL = { kr_stock:'한국', us_stock:'미국', crypto:'코인' };
+
+// ─── 환율 (localStorage 공용 — /my 와 동일 키 재사용) ───
+function getFx() {
+    var raw = localStorage.getItem('tl_fx_usd_krw');
+    var v = parseFloat(raw);
+    return (v > 0) ? v : 1400;
+}
+
+// ─── 포맷 ───
+function fmtKrw(n) {
+    if (n === null || n === undefined || isNaN(n)) return '—';
+    var sign = n < 0 ? '-' : '';
+    return sign + '₩' + Math.abs(n).toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+}
+function fmtNative(n, market) {
+    if (n === null || n === undefined || isNaN(n)) return '—';
+    if (market === 'us_stock') return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 4 });
+    return '₩' + n.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+}
+function fmtPct(p) {
+    if (p === null || p === undefined || isNaN(p)) return '—';
+    var sign = p > 0 ? '+' : '';
+    return sign + p.toFixed(2) + '%';
+}
+function pnlColor(n) { return n > 0 ? 'text-[#F04452]' : (n < 0 ? 'text-toss' : 'text-muted'); }
+
+// ─── 시작자본 입력 화면 ───
+document.getElementById('setup-capital').addEventListener('input', function() {
+    var v = parseFloat(this.value) || 0;
+    document.getElementById('setup-capital-fmt').textContent = fmtKrw(v);
+});
+function submitInit() {
+    var capital = parseFloat(document.getElementById('setup-capital').value);
+    if (!(capital > 0)) { alert('0보다 큰 값을 입력하세요'); return; }
+    fetch('/api/portfolio/init', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ initial_capital: capital })
+    }).then(r => r.json()).then(d => {
+        if (d.error) { alert(d.error); return; }
+        STATE.initialCapital = capital;
+        STATE.hasSetting = true;
+        document.getElementById('setup-screen').classList.add('hidden');
+        document.getElementById('main-screen').classList.remove('hidden');
+        document.getElementById('header-actions').style.display = '';
+        refreshNow();
+    });
+}
+
+// ─── 라이브 폴링 ───
+var liveOn = false;
+var liveTimer = null;
+var REFRESH_INTERVAL = 5000;
+
+function refreshNow() {
+    var btn = document.getElementById('refresh-btn');
+    var icon = document.getElementById('refresh-icon');
+    if (icon) icon.classList.add('spin');
+    var fx = getFx();
+    document.getElementById('fx-display').textContent = fx.toLocaleString('ko-KR');
+    return fetch('/api/portfolio/refresh?fx=' + fx)
+        .then(r => r.json())
+        .then(data => {
+            if (data && !data.error) applyRefresh(data);
+        })
+        .catch(e => console.error('refresh', e))
+        .finally(() => { if (icon) icon.classList.remove('spin'); });
+}
+function _liveLoop() {
+    if (!liveOn) return;
+    refreshNow().finally(() => {
+        if (liveOn) liveTimer = setTimeout(_liveLoop, REFRESH_INTERVAL);
+    });
+}
+function toggleLive() {
+    liveOn = !liveOn;
+    var dot = document.getElementById('live-dot');
+    var label = document.getElementById('live-label');
+    var btn = document.getElementById('live-btn');
+    if (liveOn) {
+        dot.classList.remove('bg-muted'); dot.classList.add('bg-[#F04452]', 'live-dot');
+        label.textContent = 'LIVE';
+        btn.classList.remove('text-muted'); btn.classList.add('text-white');
+        _liveLoop();
+    } else {
+        dot.classList.remove('bg-[#F04452]', 'live-dot'); dot.classList.add('bg-muted');
+        label.textContent = 'OFF';
+        btn.classList.add('text-muted'); btn.classList.remove('text-white');
+        if (liveTimer) clearTimeout(liveTimer);
+    }
+}
+
+// ─── 렌더 ───
+function applyRefresh(data) {
+    STATE.lastRefresh = data;
+    STATE.cash = data.cash;
+    STATE.fxRate = getFx();
+
+    document.getElementById('hero-total').textContent = fmtKrw(data.total_asset_krw);
+    document.getElementById('hero-cash').textContent = fmtKrw(data.cash);
+    document.getElementById('hero-initial').textContent = (data.initial_capital || 0).toLocaleString('ko-KR');
+    document.getElementById('hero-unrealized').textContent = fmtKrw(data.unrealized_krw);
+    document.getElementById('hero-unrealized').className = 'text-base lg:text-2xl font-bold tabular-nums mt-1 whitespace-nowrap ' + pnlColor(data.unrealized_krw);
+    var costKrw = data.total_cost_krw;
+    var unrealPct = costKrw > 0 ? (data.unrealized_krw / costKrw * 100) : 0;
+    document.getElementById('hero-unrealized-pct').textContent = fmtPct(unrealPct);
+    document.getElementById('hero-unrealized-pct').className = 'text-[11px] tabular-nums ' + pnlColor(unrealPct);
+    document.getElementById('hero-realized').textContent = fmtKrw(data.realized_krw);
+    document.getElementById('hero-realized').className = 'text-base lg:text-2xl font-bold tabular-nums mt-1 whitespace-nowrap ' + pnlColor(data.realized_krw);
+
+    var retElem = document.getElementById('hero-return');
+    retElem.textContent = fmtKrw(data.total_return_krw) + ' (' + fmtPct(data.total_return_pct) + ')';
+    retElem.className = 'text-[11px] tabular-nums ' + pnlColor(data.total_return_krw);
+
+    document.getElementById('hero-fetched').textContent = data.fetched_at || '—';
+
+    // 시장별 비중 텍스트
+    var bm = data.by_market || {};
+    var total = data.total_eval_krw || 0;
+    var parts = [];
+    ['kr_stock','us_stock','crypto'].forEach(m => {
+        if (bm[m]) {
+            var pct = total > 0 ? (bm[m] / total * 100) : 0;
+            parts.push(MARKET_LABEL[m] + ' ' + pct.toFixed(0) + '%');
+        }
+    });
+    document.getElementById('hero-breakdown').textContent = parts.length ? parts.join(' · ') : '보유 종목 없음';
+
+    renderHoldings(data.holdings || [], total);
+    renderClosed(data.closed || []);
+    renderTrades(data.trades || []);
+}
+
+function renderHoldings(items, totalEval) {
+    document.getElementById('holdings-count').textContent = items.length;
+    var tbody = document.getElementById('holdings-tbody');
+    var mob = document.getElementById('holdings-mobile');
+    var empty = document.getElementById('holdings-empty');
+    tbody.innerHTML = '';
+    mob.innerHTML = '';
+    if (!items.length) { empty.classList.remove('hidden'); return; }
+    empty.classList.add('hidden');
+
+    items.sort((a,b) => b.eval_krw - a.eval_krw);
+
+    items.forEach(h => {
+        var weight = totalEval > 0 ? (h.eval_krw / totalEval * 100) : 0;
+        // 데스크탑
+        var tr = document.createElement('tr');
+        tr.className = 'holding-row border-b border-elevated/40 group';
+        tr.innerHTML =
+            '<td class="py-3">' +
+                '<div class="flex items-center gap-2">' +
+                    '<span class="text-sm font-semibold text-white">' + escapeHtml(h.ticker_name || h.ticker) + '</span>' +
+                    '<span class="text-[10px] text-muted">' + escapeHtml(h.ticker) + '</span>' +
+                    '<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-elevated text-muted">' + (MARKET_LABEL[h.market] || h.market) + '</span>' +
+                '</div>' +
+            '</td>' +
+            '<td class="py-3 text-right text-sm text-muted tabular-nums">' + h.qty.toLocaleString('en-US', {maximumFractionDigits:8}) + '</td>' +
+            '<td class="py-3 text-right text-sm text-muted tabular-nums">' + fmtNative(h.avg_cost, h.market) + '</td>' +
+            '<td class="py-3 text-right text-sm text-white font-medium tabular-nums">' + fmtNative(h.current_price, h.market) +
+                ' <span class="text-[10px] ' + pnlColor(h.change_pct) + '">' + fmtPct(h.change_pct) + '</span></td>' +
+            '<td class="py-3 text-right text-sm text-white tabular-nums">' + fmtKrw(h.eval_krw) + '</td>' +
+            '<td class="py-3 text-right text-sm font-medium tabular-nums ' + pnlColor(h.unrealized_krw) + '">' + fmtKrw(h.unrealized_krw) + '</td>' +
+            '<td class="py-3 text-right text-sm font-medium tabular-nums ' + pnlColor(h.unrealized_pct) + '">' + fmtPct(h.unrealized_pct) + '</td>' +
+            '<td class="py-3 text-right">' +
+                '<div class="flex items-center justify-end gap-2">' +
+                    '<div class="w-12 h-1 bg-elevated rounded-full overflow-hidden"><div class="h-full bg-toss/60 rounded-full" style="width:' + weight.toFixed(1) + '%"></div></div>' +
+                    '<span class="text-[10px] text-muted w-8 text-right">' + weight.toFixed(0) + '%</span>' +
+                '</div>' +
+            '</td>' +
+            '<td><button onclick="quickSell(\'' + h.ticker.replace(/\'/g,"\\'") + '\',\'' + h.market + '\',\'' + (h.ticker_name||'').replace(/\'/g,"\\'") + '\')" title="매도" class="row-action-btn"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg></button></td>';
+        tbody.appendChild(tr);
+
+        // 모바일
+        var card = document.createElement('div');
+        card.className = 'p-3 rounded-xl bg-elevated/50';
+        card.innerHTML =
+            '<div class="flex items-center justify-between mb-2">' +
+                '<div class="min-w-0">' +
+                    '<div class="flex items-center gap-2">' +
+                        '<span class="text-sm font-semibold text-white truncate">' + escapeHtml(h.ticker_name || h.ticker) + '</span>' +
+                        '<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-elevated text-muted shrink-0">' + (MARKET_LABEL[h.market] || h.market) + '</span>' +
+                    '</div>' +
+                    '<span class="text-[10px] text-muted">' + escapeHtml(h.ticker) + '</span>' +
+                '</div>' +
+                '<div class="text-right shrink-0">' +
+                    '<div class="text-sm font-bold tabular-nums ' + pnlColor(h.unrealized_pct) + '">' + fmtPct(h.unrealized_pct) + '</div>' +
+                    '<div class="text-xs tabular-nums ' + pnlColor(h.unrealized_krw) + '">' + fmtKrw(h.unrealized_krw) + '</div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="grid grid-cols-3 gap-2 text-[11px]">' +
+                '<div><span class="text-muted">수량</span><p class="text-white tabular-nums">' + h.qty.toLocaleString('en-US',{maximumFractionDigits:8}) + '</p></div>' +
+                '<div><span class="text-muted">현재가</span><p class="text-white tabular-nums">' + fmtNative(h.current_price, h.market) + '</p></div>' +
+                '<div class="text-right"><span class="text-muted">평가액</span><p class="text-white tabular-nums">' + fmtKrw(h.eval_krw) + '</p></div>' +
+            '</div>';
+        mob.appendChild(card);
+    });
+}
+
+function renderClosed(items) {
+    var section = document.getElementById('closed-section');
+    var list = document.getElementById('closed-list');
+    document.getElementById('closed-count').textContent = items.length;
+    list.innerHTML = '';
+    if (!items.length) { section.classList.add('hidden'); return; }
+    section.classList.remove('hidden');
+    items.forEach(h => {
+        var row = document.createElement('div');
+        row.className = 'flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-elevated/40';
+        row.innerHTML =
+            '<div class="flex items-center gap-2 min-w-0">' +
+                '<span class="text-[9px] font-semibold w-7 text-center py-0.5 rounded bg-elevated text-muted shrink-0">' + (MARKET_LABEL[h.market] || h.market) + '</span>' +
+                '<span class="text-sm text-white truncate">' + escapeHtml(h.ticker_name || h.ticker) + '</span>' +
+                '<span class="text-[10px] text-muted">' + escapeHtml(h.ticker) + '</span>' +
+            '</div>' +
+            '<span class="text-sm tabular-nums font-medium ' + pnlColor(h.realized_pnl_krw) + '">' + fmtKrw(h.realized_pnl_krw) + '</span>';
+        list.appendChild(row);
+    });
+}
+
+function renderTrades(items) {
+    document.getElementById('trades-count').textContent = items.length;
+    var tbody = document.getElementById('trades-tbody');
+    var mob = document.getElementById('trades-mobile');
+    var empty = document.getElementById('trades-empty');
+    tbody.innerHTML = '';
+    mob.innerHTML = '';
+    if (!items.length) { empty.classList.remove('hidden'); return; }
+    empty.classList.add('hidden');
+
+    items.forEach(t => {
+        var sideLabel = t.side === 'buy' ? '매수' : '매도';
+        var sideCls = t.side === 'buy' ? 'bg-[#F04452]/10 text-[#F04452]' : 'bg-toss/10 text-toss';
+
+        var tr = document.createElement('tr');
+        tr.className = 'trade-row border-b border-elevated/40 group';
+        tr.innerHTML =
+            '<td class="py-2.5 text-xs text-muted">' + escapeHtml(t.executed_at || '') + '</td>' +
+            '<td class="py-2.5 text-xs">' +
+                '<span class="text-white font-medium">' + escapeHtml(t.ticker_name || t.ticker) + '</span> ' +
+                '<span class="text-muted">' + escapeHtml(t.ticker) + '</span>' +
+            '</td>' +
+            '<td class="py-2.5"><span class="text-[10px] font-medium px-2 py-0.5 rounded-lg ' + sideCls + '">' + sideLabel + '</span></td>' +
+            '<td class="py-2.5 text-right text-xs text-muted tabular-nums">' + t.qty.toLocaleString('en-US',{maximumFractionDigits:8}) + '</td>' +
+            '<td class="py-2.5 text-right text-xs text-white tabular-nums">' + fmtNative(t.price, t.market) + '</td>' +
+            '<td class="py-2.5 text-right text-xs text-muted tabular-nums">' + fmtNative(t.fee + t.tax, t.market) + '</td>' +
+            '<td class="py-2.5 text-right text-xs tabular-nums ' + pnlColor(t.realized_pnl) + '">' +
+                (t.side === 'sell' ? fmtNative(t.realized_pnl, t.market) : '—') + '</td>' +
+            '<td><button onclick="deleteTrade(' + t.id + ')" title="삭제" class="row-action-btn"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></td>';
+        tbody.appendChild(tr);
+
+        var card = document.createElement('div');
+        card.className = 'flex items-center gap-3 p-3 rounded-xl bg-elevated/50';
+        card.innerHTML =
+            '<span class="text-[10px] px-2 py-1 rounded-lg ' + sideCls + ' font-medium shrink-0">' + sideLabel + '</span>' +
+            '<div class="flex-1 min-w-0">' +
+                '<div class="flex items-center gap-2"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(t.ticker_name || t.ticker) + '</span><span class="text-[10px] text-muted">x' + t.qty.toLocaleString('en-US',{maximumFractionDigits:8}) + '</span></div>' +
+                '<span class="text-[10px] text-muted">' + escapeHtml(t.executed_at || '') + '</span>' +
+            '</div>' +
+            '<div class="text-right shrink-0">' +
+                '<p class="text-sm text-white tabular-nums">' + fmtNative(t.price, t.market) + '</p>' +
+                (t.side === 'sell' ? '<p class="text-[10px] tabular-nums ' + pnlColor(t.realized_pnl) + '">' + fmtNative(t.realized_pnl, t.market) + '</p>' : '') +
+            '</div>';
+        mob.appendChild(card);
+    });
+}
+
+// ─── 거래 모달 ───
+function openTradeModal() {
+    document.getElementById('trade-modal').classList.remove('hidden');
+    setSide('buy');
+    setExecNow();
+    clearSelection();
+    document.getElementById('t-search').value = '';
+    document.getElementById('t-price').value = '';
+    document.getElementById('t-qty').value = '';
+    document.getElementById('t-memo').value = '';
+    document.getElementById('t-error').classList.add('hidden');
+}
+function closeTradeModal() {
+    document.getElementById('trade-modal').classList.add('hidden');
+}
+function setSide(side) {
+    STATE.side = side;
+    var b = document.getElementById('side-buy');
+    var s = document.getElementById('side-sell');
+    if (side === 'buy') {
+        b.className = 'seg-btn bg-[#F04452] text-white'; s.className = 'seg-btn bg-elevated text-muted';
+        document.getElementById('t-submit').className = 'w-full h-11 rounded-xl bg-[#F04452] text-white font-semibold text-sm hover:bg-[#F04452]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+        document.getElementById('t-submit').textContent = '매수 체결';
+    } else {
+        b.className = 'seg-btn bg-elevated text-muted'; s.className = 'seg-btn bg-toss text-white';
+        document.getElementById('t-submit').className = 'w-full h-11 rounded-xl bg-toss text-white font-semibold text-sm hover:bg-toss/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+        document.getElementById('t-submit').textContent = '매도 체결';
+    }
+    updatePreview();
+}
+function _nowLocalISO() {
+    var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+}
+function setExecNow() { document.getElementById('t-executed-at').value = _nowLocalISO(); }
+
+// ─── 종목 검색 ───
+var _searchTimer = null;
+function _searchTicker(q) {
+    q = (q || '').trim();
+    var box = document.getElementById('t-search-results');
+    clearTimeout(_searchTimer);
+    if (!q) { box.classList.add('hidden'); return; }
+    _searchTimer = setTimeout(() => {
+        fetch('/api/ticker/search?q=' + encodeURIComponent(q))
+            .then(r => r.json()).then(items => {
+                box.innerHTML = '';
+                if (!items || !items.length) { box.classList.add('hidden'); return; }
+                items.forEach(it => {
+                    var div = document.createElement('div');
+                    div.className = 'px-3 py-2 hover:bg-elevated cursor-pointer flex items-center gap-2 text-sm';
+                    div.innerHTML =
+                        '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-elevated text-muted shrink-0">' + (MARKET_LABEL[it.market] || it.market) + '</span>' +
+                        '<span class="text-white truncate">' + escapeHtml(it.name || it.ticker) + '</span>' +
+                        '<span class="text-[10px] text-muted ml-auto shrink-0">' + escapeHtml(it.ticker) + '</span>';
+                    div.onclick = () => selectTicker(it.ticker, it.name || it.ticker, it.market);
+                    box.appendChild(div);
+                });
+                box.classList.remove('hidden');
+            });
+    }, 200);
+}
+function selectTicker(ticker, name, market) {
+    STATE.selectedTicker = { ticker, name, market };
+    document.getElementById('t-search').value = '';
+    document.getElementById('t-search-results').classList.add('hidden');
+    document.getElementById('t-selected').classList.remove('hidden');
+    document.getElementById('t-selected-name').textContent = name + ' · ' + ticker;
+    document.getElementById('t-selected-meta').textContent = MARKET_LABEL[market] || market;
+    document.getElementById('t-currency').textContent = market === 'us_stock' ? '(USD)' : '(KRW)';
+
+    renderBrokerOptions(market);
+    fetchAndShowCurrentPrice();
+    updatePreview();
+}
+function clearSelection() {
+    STATE.selectedTicker = null;
+    document.getElementById('t-selected').classList.add('hidden');
+    document.getElementById('broker-row').classList.add('hidden');
+    document.getElementById('t-fill-btn').classList.add('hidden');
+    document.getElementById('t-currency').textContent = '';
+    document.getElementById('t-preview').classList.add('hidden');
+    document.getElementById('t-submit').disabled = true;
+}
+
+// ─── 브로커 선택 ───
+function _lastBrokerKey(market) { return 'tl_pf_broker_' + market; }
+function _selectedBroker(market) {
+    var saved = localStorage.getItem(_lastBrokerKey(market));
+    var list = STATE.brokersByMarket[market] || [];
+    if (saved && list.indexOf(saved) >= 0) return saved;
+    return list[0] || '';
+}
+function renderBrokerOptions(market) {
+    var row = document.getElementById('broker-row');
+    var box = document.getElementById('broker-options');
+    var list = STATE.brokersByMarket[market] || [];
+    box.innerHTML = '';
+    var current = _selectedBroker(market);
+    list.forEach(b => {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.dataset.broker = b;
+        btn.textContent = BROKER_NAMES[b] || b;
+        btn.className = 'py-2 rounded-lg text-xs font-semibold transition-colors ' +
+            (b === current ? 'bg-toss text-white' : 'bg-elevated text-muted hover:text-white');
+        btn.onclick = () => {
+            localStorage.setItem(_lastBrokerKey(market), b);
+            renderBrokerOptions(market);
+            updatePreview();
+        };
+        box.appendChild(btn);
+    });
+    row.classList.remove('hidden');
+}
+
+// ─── 현재가 자동 입력 ───
+var _currentPriceCache = null;
+function fetchAndShowCurrentPrice() {
+    _currentPriceCache = null;
+    var sel = STATE.selectedTicker;
+    if (!sel) return;
+    var btn = document.getElementById('t-fill-btn');
+    var label = document.getElementById('t-fill-price');
+    btn.classList.add('hidden');
+    label.textContent = '...';
+
+    // /my 가 쓰는 패턴과 동일하게 ticker/search 결과의 current_price 가 없으니 별도 API 호출 필요.
+    // 가벼운 방법: refresh 결과에서 같은 종목이면 current_price 사용. 없으면 보유종목 추가일 수 있어 그냥 비활성.
+    // 더 정확히는 별도 단발 시세 API 가 필요한데, /api/portfolio/refresh 를 활용하지 않고
+    // ticker_search 결과에 가격 없는 점 때문에 일단 이미 보유 중인 종목만 즉시 채워준다.
+    var holdings = (STATE.lastRefresh && STATE.lastRefresh.holdings) || [];
+    var found = holdings.find(h => h.ticker === sel.ticker && h.market === sel.market);
+    if (found && found.current_price) {
+        _currentPriceCache = found.current_price;
+        label.textContent = fmtNative(found.current_price, sel.market);
+        btn.classList.remove('hidden');
+    }
+}
+function fillCurrentPrice() {
+    if (_currentPriceCache) {
+        document.getElementById('t-price').value = _currentPriceCache;
+        updatePreview();
+    }
+}
+
+// ─── 미리보기 ───
+var _preivewTimer = null;
+function updatePreview() {
+    clearTimeout(_preivewTimer);
+    _preivewTimer = setTimeout(_doPreview, 150);
+}
+function _doPreview() {
+    var sel = STATE.selectedTicker;
+    var price = parseFloat(document.getElementById('t-price').value) || 0;
+    var qty = parseFloat(document.getElementById('t-qty').value) || 0;
+    var box = document.getElementById('t-preview');
+    var submit = document.getElementById('t-submit');
+    if (!sel || price <= 0 || qty <= 0) {
+        box.classList.add('hidden'); submit.disabled = true; return;
+    }
+
+    var broker = _selectedBroker(sel.market);
+    var url = '/api/portfolio/fee-preview?broker=' + broker + '&market=' + sel.market +
+              '&side=' + STATE.side + '&price=' + price + '&qty=' + qty;
+    fetch(url).then(r => r.json()).then(d => {
+        if (d.error) { box.classList.add('hidden'); submit.disabled = true; return; }
+        var fx = (sel.market === 'us_stock') ? getFx() : 1;
+        var notional = price * qty;
+        var totalNative = (STATE.side === 'buy') ? (notional + d.fee) : (notional - d.fee - d.tax);
+        var totalKrw = totalNative * fx;
+
+        document.getElementById('pv-notional').textContent = fmtNative(notional, sel.market);
+        document.getElementById('pv-fee').textContent = fmtNative(d.fee, sel.market);
+        document.getElementById('pv-tax').textContent = fmtNative(d.tax, sel.market);
+        document.getElementById('pv-tax-row').style.display = (STATE.side === 'sell' && d.tax > 0) ? '' : 'none';
+        document.getElementById('pv-total').textContent = fmtKrw(Math.abs(totalKrw));
+
+        // 매수: 잔고 부족 체크
+        if (STATE.side === 'buy') {
+            var afterCash = STATE.cash - totalKrw;
+            var cashEl = document.getElementById('pv-cash');
+            cashEl.textContent = fmtKrw(afterCash);
+            cashEl.className = 'tabular-nums ' + (afterCash < 0 ? 'text-[#F04452]' : 'text-white');
+            document.getElementById('pv-cash-row').style.display = '';
+            submit.disabled = afterCash < 0;
+        } else {
+            document.getElementById('pv-cash-row').style.display = 'none';
+            submit.disabled = false;
+        }
+
+        box.classList.remove('hidden');
+        STATE._previewFee = d.fee;
+        STATE._previewTax = d.tax;
+    });
+}
+
+function submitTrade() {
+    var sel = STATE.selectedTicker;
+    if (!sel) { _showError('종목을 선택하세요'); return; }
+    var price = parseFloat(document.getElementById('t-price').value) || 0;
+    var qty = parseFloat(document.getElementById('t-qty').value) || 0;
+    if (price <= 0 || qty <= 0) { _showError('단가/수량 입력'); return; }
+
+    var broker = _selectedBroker(sel.market);
+    var fx = (sel.market === 'us_stock') ? getFx() : 1;
+    var execAt = document.getElementById('t-executed-at').value;
+    var memo = document.getElementById('t-memo').value;
+
+    var btn = document.getElementById('t-submit');
+    btn.disabled = true;
+
+    fetch('/api/portfolio/trade', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+            ticker: sel.ticker, ticker_name: sel.name, market: sel.market,
+            broker: broker, side: STATE.side, qty: qty, price: price, fx_rate: fx,
+            executed_at: execAt, memo: memo,
+        })
+    }).then(r => r.json()).then(d => {
+        if (d.error) { _showError(d.error); btn.disabled = false; return; }
+        closeTradeModal();
+        refreshNow();
+    }).catch(e => { _showError(String(e)); btn.disabled = false; });
+}
+
+function _showError(msg) {
+    var el = document.getElementById('t-error');
+    el.textContent = msg; el.classList.remove('hidden');
+}
+
+function deleteTrade(id) {
+    if (!confirm('이 거래를 삭제하시겠습니까? 해당 종목의 평단/실현손익이 재계산됩니다.')) return;
+    fetch('/api/portfolio/trade/' + id, { method: 'DELETE' })
+        .then(r => r.json()).then(d => {
+            if (d.error) { alert(d.error); return; }
+            refreshNow();
+        });
+}
+
+function quickSell(ticker, market, name) {
+    openTradeModal();
+    setSide('sell');
+    selectTicker(ticker, name || ticker, market);
+}
+
+// ─── 리셋 모달 ───
+function openResetModal() {
+    document.getElementById('reset-modal').classList.remove('hidden');
+    document.getElementById('reset-capital').value = '';
+}
+function closeResetModal() { document.getElementById('reset-modal').classList.add('hidden'); }
+function submitReset() {
+    if (!confirm('정말로 모든 거래/잔고를 삭제하시겠습니까?')) return;
+    var capInput = document.getElementById('reset-capital').value;
+    var body = {};
+    if (capInput) body.initial_capital = parseFloat(capInput);
+    fetch('/api/portfolio/reset', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+    }).then(r => r.json()).then(d => {
+        if (d.error) { alert(d.error); return; }
+        closeResetModal();
+        if (body.initial_capital) STATE.initialCapital = body.initial_capital;
+        refreshNow();
+    });
+}
+
+// ─── 헬퍼 ───
+function escapeHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── 초기 ───
+if (STATE.hasSetting) {
+    refreshNow();
+}
+</script>
 {% endblock %}
