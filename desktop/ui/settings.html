@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>TradeLab 설정</title>
+<style>
+  :root {
+    --bg: #1c1f25;
+    --card: #242831;
+    --fg: #e8eaed;
+    --dim: #9aa0a6;
+    --accent: #3a82f7;
+    --line: rgba(255,255,255,0.08);
+    --ok: #66bb6a;
+    --err: #ef5350;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  h2 {
+    margin: 0 0 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--dim);
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label {
+    font-size: 10px;
+    color: var(--dim);
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+  .field input {
+    width: 100%;
+    padding: 7px 10px;
+    background: var(--card);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 12px;
+    transition: border-color 0.15s;
+  }
+  .field input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: #2a2f38;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  button {
+    flex: 1;
+    padding: 8px 12px;
+    border: 0;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: filter 0.1s, transform 0.05s;
+  }
+  button:active { transform: scale(0.97); }
+  button.primary {
+    background: var(--accent); color: white;
+  }
+  button.primary:hover { filter: brightness(1.1); }
+  button.sec {
+    background: var(--card); color: var(--dim);
+    border: 1px solid var(--line);
+  }
+  button.sec:hover { background: #2a2f38; color: var(--fg); }
+  .msg {
+    font-size: 11px;
+    min-height: 14px;
+    color: var(--dim);
+    text-align: center;
+    margin-top: 2px;
+  }
+  .msg.ok { color: var(--ok); }
+  .msg.err { color: var(--err); }
+  .hint {
+    font-size: 10px;
+    color: var(--dim);
+    text-align: center;
+    margin-top: auto;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <h2>서버 설정</h2>
+  <div class="field">
+    <label>서버 URL</label>
+    <input id="base" placeholder="https://your-server.com" autocomplete="off" />
+  </div>
+  <div class="field">
+    <label>유저명</label>
+    <input id="user" placeholder="admin" autocomplete="off" />
+  </div>
+  <div class="field">
+    <label>비밀번호</label>
+    <input id="pw" type="password" autocomplete="off" />
+  </div>
+  <div class="row">
+    <button id="save" class="primary">저장</button>
+    <button id="test" class="sec">접속 테스트</button>
+  </div>
+  <div class="msg" id="msg"></div>
+  <div class="hint">단축키: 토글 Ctrl+Shift+X · 즉시 숨김 Ctrl+Shift+H</div>
+
+<script type="module">
+import { LazyStore } from "https://esm.sh/@tauri-apps/plugin-store@2";
+import { fetch as tFetch } from "https://esm.sh/@tauri-apps/plugin-http@2";
+
+const store = new LazyStore("settings.json");
+const $ = (id) => document.getElementById(id);
+
+(async () => {
+  $("base").value = (await store.get("base_url")) || "";
+  $("user").value = (await store.get("user")) || "";
+  $("pw").value = (await store.get("pw")) || "";
+})();
+
+function setMsg(text, kind = "") {
+  const el = $("msg");
+  el.textContent = text;
+  el.className = "msg " + kind;
+}
+
+$("save").onclick = async () => {
+  await store.set("base_url", $("base").value.trim());
+  await store.set("user", $("user").value.trim());
+  await store.set("pw", $("pw").value);
+  await store.save();
+  setMsg("저장됨", "ok");
+};
+
+$("test").onclick = async () => {
+  const base = $("base").value.trim().replace(/\/$/, "");
+  const user = $("user").value.trim();
+  const pw = $("pw").value;
+  if (!base || !user) { setMsg("URL/유저 입력 필요", "err"); return; }
+  setMsg("테스트 중...");
+  try {
+    const res = await tFetch(`${base}/api/my/watch`, {
+      method: "GET",
+      headers: { "Authorization": "Basic " + btoa(`${user}:${pw}`) },
+    });
+    if (res.ok) setMsg(`OK (${res.status})`, "ok");
+    else setMsg(`실패 ${res.status}`, "err");
+  } catch (e) {
+    setMsg("연결 실패: " + (e.message || e), "err");
+  }
+};
+</script>
+</body>
+</html>

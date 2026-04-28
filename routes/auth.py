@@ -191,5 +191,15 @@ def get_current_user(request: Request) -> str:
         expire, username = _sessions[token]
         if time.time() <= expire:
             return username
-    # 쿠키 없거나 만료 — Basic Auth 헤더에서 추출
-    return _get_username(request)
+    # 쿠키 없거나 만료 — Basic Auth 헤더 검증 (username + password 모두 확인)
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Basic "):
+        import base64
+        try:
+            decoded = base64.b64decode(auth[6:]).decode("utf-8")
+            username, password = decoded.split(":", 1)
+            if username in AUTH_USERS and AUTH_USERS[username] == password:
+                return username
+        except Exception:
+            pass
+    return ""

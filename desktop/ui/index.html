@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TradeLab</title>
+<style>
+  :root {
+    --bg: rgba(20, 22, 28, 0.92);
+    --fg: #e8eaed;
+    --dim: #9aa0a6;
+    --up: #ef5350;
+    --down: #42a5f5;
+    --line: rgba(255,255,255,0.06);
+    --accent: #3a82f7;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: transparent; }
+  body {
+    font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+    color: var(--fg);
+    user-select: none;
+    -webkit-user-select: none;
+    overflow: hidden;
+  }
+  .frame {
+    height: 100vh;
+    background: var(--bg);
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(8px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .titlebar {
+    height: 28px;
+    background: rgba(0,0,0,0.25);
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+  .drag {
+    flex: 1; height: 100%; -webkit-app-region: drag; cursor: move;
+    display: flex; align-items: center; padding-left: 4px;
+    min-width: 0;
+  }
+  .title { font-size: 11px; color: var(--dim); }
+  .titlebar button {
+    -webkit-app-region: no-drag;
+    background: transparent;
+    border: 0;
+    color: var(--dim);
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .titlebar button:hover { background: rgba(255,255,255,0.08); color: var(--fg); }
+  .titlebar button.active { color: var(--accent); }
+  .body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 6px;
+    min-height: 0;
+  }
+  .body::-webkit-scrollbar { width: 4px; }
+  .body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  /* 행 */
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 6px;
+    border-bottom: 1px solid var(--line);
+    gap: 8px;
+    cursor: grab;
+    border-radius: 4px;
+    transition: background 0.1s;
+  }
+  .row:hover { background: rgba(255,255,255,0.03); }
+  .row:active { cursor: grabbing; }
+  .row:last-child { border-bottom: 0; }
+  .row.dragging { opacity: 0.4; }
+  .row.drag-over { background: rgba(58,130,247,0.15); }
+  .left { min-width: 0; flex: 1; }
+  .name {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ticker { font-size: 10px; color: var(--dim); }
+  .right { text-align: right; flex-shrink: 0; }
+  .price { font-variant-numeric: tabular-nums; }
+  .pct { font-size: 10px; font-variant-numeric: tabular-nums; }
+  .up { color: var(--up); }
+  .down { color: var(--down); }
+
+  /* 푸터 — 새로고침 컨트롤 */
+  .footer {
+    background: rgba(0,0,0,0.25);
+    padding: 4px 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--dim);
+    font-size: 10px;
+    flex-shrink: 0;
+    height: 26px;
+  }
+  .footer .live-toggle {
+    -webkit-app-region: no-drag;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid transparent;
+    color: var(--dim);
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    height: 18px;
+    line-height: 1;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .footer .live-toggle.on { background: rgba(58,130,247,0.15); color: var(--accent); border-color: rgba(58,130,247,0.4); }
+  .footer .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.6; }
+  .footer .live-toggle.on .dot { opacity: 1; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .footer input[type=number] {
+    width: 38px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid transparent;
+    color: var(--fg);
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 10px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .footer input[type=number]:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: rgba(255,255,255,0.07);
+  }
+  .footer input[type=number]::-webkit-inner-spin-button,
+  .footer input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none; margin: 0;
+  }
+  .footer .spacer { flex: 1; }
+  .footer .ts { font-variant-numeric: tabular-nums; }
+  .footer .cd { font-variant-numeric: tabular-nums; min-width: 22px; text-align: right; }
+
+  /* 빈 상태 */
+  .empty {
+    padding: 24px 12px;
+    text-align: center;
+    color: var(--dim);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  /* 매우 작아질 때 — 타이틀바만 남는 모드 자동 (body 가 0이 되면 자연스럽게) */
+  .frame.compact .body { display: none; }
+  .frame.compact .footer { display: none; }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <div class="titlebar">
+    <div class="drag"><span class="title" id="title">TradeLab</span></div>
+    <button id="btn-refresh" title="새로고침">↻</button>
+    <button id="btn-pin" class="active" title="항상 위">📌</button>
+    <button id="btn-settings" title="설정">⚙</button>
+    <button id="btn-hide" title="숨기기">─</button>
+  </div>
+  <div class="body" id="body">
+    <div class="empty">로딩...</div>
+  </div>
+  <div class="footer">
+    <button id="live-toggle" class="live-toggle"><span class="dot"></span><span id="live-label">OFF</span></button>
+    <input type="number" id="interval" min="3" max="300" value="5" title="새로고침 주기 (초)">
+    <span class="cd" id="cd">--</span>
+    <span class="spacer"></span>
+    <span class="ts" id="status">--:--</span>
+  </div>
+</div>
+
+<script type="module">
+import { getCurrentWindow } from "https://esm.sh/@tauri-apps/api@2/window";
+import { WebviewWindow } from "https://esm.sh/@tauri-apps/api@2/webviewWindow";
+import { fetch as tFetch } from "https://esm.sh/@tauri-apps/plugin-http@2";
+import { LazyStore } from "https://esm.sh/@tauri-apps/plugin-store@2";
+
+const store = new LazyStore("settings.json");
+const win = getCurrentWindow();
+const $ = (id) => document.getElementById(id);
+
+let currentItems = [];
+let pinned = true;
+let liveOn = false;
+let liveTimer = null;
+let liveNextAt = 0;
+let intervalSec = 5;
+let editingInterval = false;
+
+async function loadCfg() {
+  const base = (await store.get("base_url")) || "";
+  const user = (await store.get("user")) || "";
+  const pw = (await store.get("pw")) || "";
+  const live = (await store.get("live_on"));
+  const sec = Number(await store.get("interval")) || 5;
+  intervalSec = Math.max(3, Math.min(300, sec));
+  liveOn = live === true;
+  $("interval").value = intervalSec;
+  updateLiveBtn();
+  return { base, user, pw };
+}
+
+async function saveLiveCfg() {
+  await store.set("live_on", liveOn);
+  await store.set("interval", intervalSec);
+  await store.save();
+}
+
+function updateLiveBtn() {
+  const btn = $("live-toggle");
+  btn.classList.toggle("on", liveOn);
+  $("live-label").textContent = liveOn ? "LIVE" : "OFF";
+  $("cd").textContent = liveOn ? "--" : "";
+}
+
+function fmtPrice(market, price, currency) {
+  const n = Number(price || 0);
+  if (market === "kr_stock") return n.toLocaleString("ko-KR") + "원";
+  if (market === "us_stock") return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (currency === "USD") return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  return n.toLocaleString("ko-KR") + "원";
+}
+
+function fmtPct(p) {
+  const n = Number(p || 0);
+  return (n >= 0 ? "+" : "") + n.toFixed(2) + "%";
+}
+
+function pctClass(p) {
+  const n = Number(p || 0);
+  if (n > 0) return "up";
+  if (n < 0) return "down";
+  return "";
+}
+
+function escape_(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+function render(items) {
+  currentItems = items || [];
+  const body = $("body");
+  if (currentItems.length === 0) {
+    body.innerHTML = '<div class="empty">관심종목 없음<br><span style="font-size:10px">⚙ 에서 서버/계정 입력</span></div>';
+    return;
+  }
+  body.innerHTML = currentItems.map(w => `
+    <div class="row" draggable="true" data-id="${w.id}">
+      <div class="left">
+        <div class="name">${escape_(w.ticker_name || w.ticker)}</div>
+        <div class="ticker">${escape_(w.ticker)}</div>
+      </div>
+      <div class="right">
+        <div class="price">${fmtPrice(w.market, w.price, w.currency)}</div>
+        <div class="pct ${pctClass(w.change_pct)}">${fmtPct(w.change_pct)}</div>
+      </div>
+    </div>
+  `).join("");
+  attachDnD();
+}
+
+// ── DnD 순서 변경 ────────────────────────
+let dragId = null;
+function attachDnD() {
+  const rows = document.querySelectorAll(".row");
+  rows.forEach(row => {
+    row.addEventListener("dragstart", e => {
+      dragId = row.dataset.id;
+      row.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    row.addEventListener("dragend", () => {
+      row.classList.remove("dragging");
+      document.querySelectorAll(".row.drag-over").forEach(r => r.classList.remove("drag-over"));
+    });
+    row.addEventListener("dragover", e => {
+      e.preventDefault();
+      if (row.dataset.id !== dragId) row.classList.add("drag-over");
+    });
+    row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+    row.addEventListener("drop", async e => {
+      e.preventDefault();
+      row.classList.remove("drag-over");
+      const targetId = row.dataset.id;
+      if (!dragId || dragId === targetId) return;
+      const fromIdx = currentItems.findIndex(x => String(x.id) === String(dragId));
+      const toIdx = currentItems.findIndex(x => String(x.id) === String(targetId));
+      if (fromIdx < 0 || toIdx < 0) return;
+      const [moved] = currentItems.splice(fromIdx, 1);
+      currentItems.splice(toIdx, 0, moved);
+      render(currentItems);
+      await reorderOnServer(currentItems.map(x => x.id));
+    });
+  });
+}
+
+async function reorderOnServer(orderIds) {
+  const cfg = await loadCfg();
+  if (!cfg.base) return;
+  try {
+    await tFetch(`${cfg.base.replace(/\/$/, "")}/api/my/watch/reorder`, {
+      method: "POST",
+      headers: {
+        "Authorization": "Basic " + btoa(`${cfg.user}:${cfg.pw}`),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ order: orderIds }),
+    });
+  } catch (e) { console.error(e); }
+}
+
+// ── refresh ────────────────────────
+async function refresh() {
+  const cfg = await loadCfg();
+  if (!cfg.base || !cfg.user) {
+    $("status").textContent = "설정필요";
+    render([]);
+    return;
+  }
+  try {
+    const res = await tFetch(`${cfg.base.replace(/\/$/, "")}/api/my/refresh`, {
+      method: "GET",
+      headers: { "Authorization": "Basic " + btoa(`${cfg.user}:${cfg.pw}`) },
+    });
+    if (!res.ok) {
+      $("status").textContent = `HTTP ${res.status}`;
+      return;
+    }
+    const data = await res.json();
+    render(data.watches || []);
+    $("status").textContent = new Date().toTimeString().slice(0, 8);
+  } catch (e) {
+    $("status").textContent = "오류";
+    console.error(e);
+  }
+}
+
+// ── live loop (Date.now 기반 — 백그라운드 throttle 무관) ──
+async function liveLoop() {
+  if (!liveOn) return;
+  await refresh();
+  liveNextAt = Date.now() + intervalSec * 1000;
+  if (liveTimer) clearInterval(liveTimer);
+  liveTimer = setInterval(liveTick, 250);
+}
+
+function liveTick() {
+  if (!liveOn || editingInterval) {
+    $("cd").textContent = editingInterval ? "수정중" : "";
+    return;
+  }
+  const remain = Math.max(0, Math.ceil((liveNextAt - Date.now()) / 1000));
+  $("cd").textContent = remain + "s";
+  if (Date.now() >= liveNextAt) {
+    clearInterval(liveTimer); liveTimer = null;
+    liveLoop();
+  }
+}
+
+function stopLive() {
+  if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  $("cd").textContent = "";
+}
+
+async function setLive(on) {
+  liveOn = on;
+  updateLiveBtn();
+  await saveLiveCfg();
+  if (on) liveLoop();
+  else stopLive();
+}
+
+// ── settings 창 (작고 이쁘게) ──
+async function openSettings() {
+  const existing = await WebviewWindow.getByLabel("settings");
+  if (existing) {
+    await existing.show(); await existing.setFocus();
+    return;
+  }
+  new WebviewWindow("settings", {
+    url: "settings.html",
+    title: "TradeLab 설정",
+    width: 340,
+    height: 280,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    decorations: true,
+    transparent: false,
+  });
+}
+
+// ── 이벤트 ──
+$("btn-hide").onclick = () => win.hide();
+$("btn-refresh").onclick = () => { refresh(); if (liveOn) liveLoop(); };
+$("btn-pin").onclick = async () => {
+  pinned = !pinned;
+  await win.setAlwaysOnTop(pinned);
+  $("btn-pin").classList.toggle("active", pinned);
+};
+$("btn-settings").onclick = openSettings;
+
+$("live-toggle").onclick = () => setLive(!liveOn);
+
+$("interval").addEventListener("focus", () => {
+  editingInterval = true;
+  $("cd").textContent = "수정중";
+});
+$("interval").addEventListener("blur", async () => {
+  editingInterval = false;
+  const v = Math.max(3, Math.min(300, Number($("interval").value) || 5));
+  $("interval").value = v;
+  intervalSec = v;
+  await saveLiveCfg();
+  if (liveOn) liveLoop();
+});
+$("interval").addEventListener("keydown", e => {
+  if (e.key === "Enter") $("interval").blur();
+});
+
+// ── compact 자동 (창 너무 작으면 타이틀만) ──
+const ro = new ResizeObserver(() => {
+  const h = window.innerHeight;
+  $("frame").classList.toggle("compact", h < 70);
+});
+ro.observe(document.body);
+
+// ── 시작 ──
+(async () => {
+  await loadCfg();
+  await refresh();
+  if (liveOn) liveLoop();
+})();
+
+window.addEventListener("focus", () => {
+  if (liveOn && Date.now() >= liveNextAt) liveLoop();
+});
+</script>
+</body>
+</html>
