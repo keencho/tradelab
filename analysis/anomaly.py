@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import httpx
 
 from config import (
-    KST, PRICE_ALERT_VS_CLOSE, PRICE_ALERT_MOMENTUM,
+    KST, PRICE_ALERT_VS_CLOSE, PRICE_ALERT_MOMENTUM_STOCK, PRICE_ALERT_MOMENTUM_CRYPTO,
     SIGNAL_TYPE_NAMES, FINNHUB_API_KEY, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET,
     get_logger,
 )
@@ -245,6 +245,7 @@ def detect_price_anomalies() -> list[dict]:
                     "market": market,
                     "z_score": round(vs_close_pct / 2, 2),
                     "raw_value": price,
+                    "pct": vs_close_pct,
                 })
 
             # ── 2) 직전 수집가 대비 ──
@@ -263,7 +264,12 @@ def detect_price_anomalies() -> list[dict]:
                 prev_price = prev_row[0]
                 momentum_pct = (price - prev_price) / prev_price * 100
 
-                if abs(momentum_pct) >= PRICE_ALERT_MOMENTUM:
+                momentum_threshold = (
+                    PRICE_ALERT_MOMENTUM_CRYPTO if market == "crypto"
+                    else PRICE_ALERT_MOMENTUM_STOCK
+                )
+
+                if abs(momentum_pct) >= momentum_threshold:
                     direction = "bullish" if momentum_pct > 0 else "bearish"
                     confidence = min(0.95, 0.5 + abs(momentum_pct) * 0.05)
                     sign = "+" if momentum_pct > 0 else ""
@@ -279,6 +285,7 @@ def detect_price_anomalies() -> list[dict]:
                         "market": market,
                         "z_score": round(momentum_pct / 2, 2),
                         "raw_value": price,
+                        "pct": momentum_pct,
                     })
 
     finally:

@@ -101,13 +101,19 @@ SIGNAL_TYPE_NAMES = {
 }
 
 # --- 가격 알림 기준 (%) ---
-PRICE_ALERT_VS_CLOSE = 5.0    # 전일 종가 대비 ±5%
-PRICE_ALERT_MOMENTUM = 3.0    # 직전 수집가 대비 ±3%
+PRICE_ALERT_VS_CLOSE = 5.0           # 전일 종가 대비 ±5% — ratchet 1단계
+PRICE_ALERT_MOMENTUM_STOCK = 3.0     # 주식 직전 수집가 대비 ±3%
+PRICE_ALERT_MOMENTUM_CRYPTO = 5.0    # 코인 직전 수집가 대비 ±5%
+
+# vs_close ratchet 단계 (% 절대값) — 같은 방향에서는 다음 단계 도달했을 때만 알림
+PRICE_VS_CLOSE_RATCHET = [5.0, 7.0, 10.0, 15.0, 20.0]
 
 # --- 쿨다운 (분) ---
-COOLDOWN_VS_CLOSE = 120       # 전일 대비: 2시간
-COOLDOWN_MOMENTUM = 30        # 직전 대비: 30분
-COOLDOWN_DEFAULT = 60         # 기타 시그널: 1시간
+COOLDOWN_VS_CLOSE = 60 * 24     # 전일 대비: 24시간 (같은 단계 안전망 — 실제 차단은 ratchet 이 함)
+COOLDOWN_MOMENTUM = 30          # 직전 대비: 30분
+COOLDOWN_ZSCORE = 60 * 12       # z-score 시그널 (OI/펀딩/외인 등): 12시간 — 추세 지속형 대응
+COOLDOWN_DEFAULT = 60           # 폴백
+COOLDOWN_DIRECTION_FLIP = 30    # 방향 전환 시 적용되는 별도 쿨다운 (가격 흔들림으로 인한 무력화 방지)
 
 # --- 가상매매 ---
 DEFAULT_CAPITAL = 100_000_000  # 1억원
