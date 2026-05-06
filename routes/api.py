@@ -493,12 +493,28 @@ def _fetch_price(ticker: str, market: str) -> dict:
             )
             resp.raise_for_status()
             data = resp.json()
-            price = _parse_naver_number(data.get("closePrice", "0"))
-            diff = _parse_naver_number(data.get("compareToPreviousClosePrice", "0"))
+            close_price = _parse_naver_number(data.get("closePrice", "0"))
+            close_diff = _parse_naver_number(data.get("compareToPreviousClosePrice", "0"))
+            close_pct = _parse_naver_number(data.get("fluctuationsRatio", "0"))
+
+            # NXT(넥스트레이드) 시간 외 — overMarketPriceInfo.overMarketStatus == OPEN 이면 우선 사용
+            over = data.get("overMarketPriceInfo") or {}
+            if over.get("overMarketStatus") == "OPEN":
+                over_price = _parse_naver_number(over.get("overPrice", "0"))
+                if over_price > 0:
+                    over_diff = _parse_naver_number(over.get("compareToPreviousClosePrice", "0"))
+                    over_pct = _parse_naver_number(over.get("fluctuationsRatio", "0"))
+                    return {
+                        "price": over_price,
+                        "prev_close": over_price - over_diff,
+                        "change_pct": over_pct,
+                        "name": data.get("stockName", ""),
+                    }
+
             return {
-                "price": price,
-                "prev_close": price - diff,
-                "change_pct": _parse_naver_number(data.get("fluctuationsRatio", "0")),
+                "price": close_price,
+                "prev_close": close_price - close_diff,
+                "change_pct": close_pct,
                 "name": data.get("stockName", ""),
             }
 

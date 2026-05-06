@@ -129,8 +129,8 @@ async def dashboard(request: Request):
         session.close()
 
 
-@router.get("/portfolio", response_class=HTMLResponse)
-async def portfolio(request: Request):
+@router.get("/paper", response_class=HTMLResponse)
+async def paper(request: Request):
     """가상매매 페이지 — user별 격리. /my 와 동일하게 인증+서버환경 필요."""
     denied = _auth_or_401(request)
     if denied:
@@ -146,7 +146,7 @@ async def portfolio(request: Request):
         has_setting = bool(setting and setting.initial_capital > 0)
         return _page_response(request, "pages/portfolio.html", {
             "request": request,
-            "page": "portfolio",
+            "page": "paper",
             "has_setting": has_setting,
             "initial_capital": setting.initial_capital if setting else 0,
         })

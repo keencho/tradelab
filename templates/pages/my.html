@@ -84,6 +84,11 @@
     }
     .my-input:focus { box-shadow: 0 0 0 2px rgba(49,130,246,.5); }
     .my-input::placeholder { color: #8B95A1; }
+
+    /* number input 스피너 제거 */
+    input.no-spin::-webkit-inner-spin-button,
+    input.no-spin::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input.no-spin { -moz-appearance: textfield; }
 </style>
 {% endblock %}
 
@@ -120,6 +125,13 @@
             <span id="live-dot" class="w-1.5 h-1.5 rounded-full bg-muted"></span>
             <span id="live-label">OFF</span>
         </button>
+        <div id="live-interval-wrap" class="h-9 hidden items-center bg-elevated rounded-xl px-2.5" title="실시간 갱신 주기 (5–60초)">
+            <input id="live-interval" type="number" min="5" max="60" step="1" value="5"
+                inputmode="numeric"
+                class="no-spin w-7 bg-transparent border-0 text-white text-center tabular-nums focus:outline-none p-0"
+                style="font-size:13px !important;">
+            <span class="text-[10px] text-muted ml-0.5">초</span>
+        </div>
 
         <div class="w-px h-6 bg-elevated mx-0.5 lg:mx-1 hidden sm:block"></div>
 
@@ -323,12 +335,10 @@
                             <span class="text-sm font-semibold text-white">{{ h.ticker_name or h.ticker }}</span>
                             <span class="text-[11px] text-muted">{{ h.ticker }}</span>
                         </div>
-                        {% if h.is_hidden %}
-                        <span class="hidden-chip">
+                        <span class="hidden-chip{% if not h.is_hidden %} hidden{% endif %}">
                             <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
                             숨김
                         </span>
-                        {% endif %}
                     </div>
                 </td>
                 <td class="px-3 py-3 text-right text-sm text-muted tabular-nums">{{ "{:g}".format(h.qty) }}</td>
@@ -344,11 +354,8 @@
                     <button onclick="toggleHidden({{ h.id }}, this)"
                         class="row-action-btn {% if h.is_hidden %}active{% endif %}"
                         title="{% if h.is_hidden %}집계에 다시 포함{% else %}집계에서 숨기기{% endif %}">
-                        {% if h.is_hidden %}
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
-                        {% else %}
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                        {% endif %}
+                        <svg class="icon-eye-off w-4 h-4{% if not h.is_hidden %} hidden{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+                        <svg class="icon-eye-on w-4 h-4{% if h.is_hidden %} hidden{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                     </button>
                 </td>
             </tr>
@@ -367,19 +374,14 @@
                         <p class="text-sm font-semibold text-white truncate">{{ h.ticker_name or h.ticker }}</p>
                         <p class="text-[11px] text-muted">{{ h.ticker }} · {{ "{:g}".format(h.qty) }}주</p>
                     </div>
-                    {% if h.is_hidden %}
-                    <span class="hidden-chip">숨김</span>
-                    {% endif %}
+                    <span class="hidden-chip{% if not h.is_hidden %} hidden{% endif %}">숨김</span>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                     <span class="text-sm font-semibold tabular-nums hide-strike" data-money data-pnl>—</span>
                     <button onclick="toggleHidden({{ h.id }}, this)"
                         class="row-action-btn active text-muted">
-                        {% if h.is_hidden %}
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
-                        {% else %}
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                        {% endif %}
+                        <svg class="icon-eye-off w-4 h-4{% if not h.is_hidden %} hidden{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+                        <svg class="icon-eye-on w-4 h-4{% if h.is_hidden %} hidden{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                     </button>
                 </div>
             </div>
@@ -426,26 +428,22 @@
         <div class="px-4 lg:px-5 pb-3">
             <div class="space-y-1">
                 {% for h in closed %}
-                <div class="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-elevated/40 transition-colors{% if h.is_hidden %} is-hidden-row{% endif %}">
+                <div class="closed-row holding-row flex items-center justify-between py-2 px-2 rounded-lg hover:bg-elevated/40 transition-colors{% if h.is_hidden %} is-hidden-row{% endif %}"
+                    data-holding="{{ h.id }}">
                     <div class="flex items-center gap-2 min-w-0">
                         <span class="text-sm text-white truncate">{{ h.ticker_name or h.ticker }}</span>
                         <span class="text-[11px] text-muted">{{ h.ticker }}</span>
-                        {% if h.is_hidden %}
-                        <span class="hidden-chip">숨김</span>
-                        {% endif %}
+                        <span class="hidden-chip{% if not h.is_hidden %} hidden{% endif %}">숨김</span>
                     </div>
                     <div class="flex items-center gap-3 shrink-0">
-                        <span class="text-xs font-semibold tabular-nums hide-strike {% if h.realized_pnl > 0 %}text-[#F04452]{% elif h.realized_pnl < 0 %}text-toss{% else %}text-muted{% endif %}" data-money>
+                        <span class="text-xs font-semibold tabular-nums hide-strike {% if h.realized_pnl > 0 %}text-[#F04452]{% elif h.realized_pnl < 0 %}text-toss{% else %}text-muted{% endif %}" data-money data-closed-realized="{{ h.realized_pnl }}">
                             {{ "{:+,.0f}".format(h.realized_pnl) }}
                         </span>
                         <button onclick="toggleHidden({{ h.id }}, this)"
-                            class="row-action-btn active text-muted"
+                            class="row-action-btn {% if h.is_hidden %}active{% endif %} text-muted"
                             title="{% if h.is_hidden %}집계에 다시 포함{% else %}집계에서 숨기기{% endif %}">
-                            {% if h.is_hidden %}
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
-                            {% else %}
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                            {% endif %}
+                            <svg class="icon-eye-off w-4 h-4{% if not h.is_hidden %} hidden{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+                            <svg class="icon-eye-on w-4 h-4{% if h.is_hidden %} hidden{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                         </button>
                     </div>
                 </div>
@@ -983,7 +981,52 @@ function toggleMask() {
 var refreshing = false;
 var liveTimer = null;
 var liveCountdown = 0;
-var LIVE_INTERVAL = 5;  // 초
+var liveNextAt = 0;     // Date.now() ms — 다음 fetch 예정 시각
+var LIVE_INTERVAL = 5;  // 초 (5~60, localStorage 저장)
+var LIVE_INTERVAL_MIN = 5;
+var LIVE_INTERVAL_MAX = 60;
+var LIVE_INTERVAL_KEY = 'tl_my_live_interval';
+var editingInterval = false;
+
+function _loadLiveInterval() {
+    var raw = parseInt(localStorage.getItem(LIVE_INTERVAL_KEY), 10);
+    if (!isNaN(raw) && raw >= LIVE_INTERVAL_MIN && raw <= LIVE_INTERVAL_MAX) {
+        LIVE_INTERVAL = raw;
+    }
+    var input = document.getElementById('live-interval');
+    if (input) input.value = LIVE_INTERVAL;
+}
+// focus 중에는 타이머 정지 + 라벨 "수정중" 표시 — blur/Enter 시 새 값으로 재시작
+function _onIntervalFocus() {
+    editingInterval = true;
+    if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+    _setLiveLabel();
+    var wrap = document.getElementById('live-interval-wrap');
+    if (wrap) wrap.classList.add('ring-2', 'ring-toss/60');
+}
+function _onIntervalCommit() {
+    editingInterval = false;
+    var wrap = document.getElementById('live-interval-wrap');
+    if (wrap) wrap.classList.remove('ring-2', 'ring-toss/60');
+    var input = document.getElementById('live-interval');
+    var v = parseInt(input.value, 10);
+    if (isNaN(v)) v = LIVE_INTERVAL;
+    if (v < LIVE_INTERVAL_MIN) v = LIVE_INTERVAL_MIN;
+    if (v > LIVE_INTERVAL_MAX) v = LIVE_INTERVAL_MAX;
+    input.value = v;
+    if (v !== LIVE_INTERVAL) {
+        LIVE_INTERVAL = v;
+        localStorage.setItem(LIVE_INTERVAL_KEY, String(v));
+    }
+    // live 가 켜져 있으면 새 interval 로 카운트다운 재시작 (fetch 즉시 X)
+    if (liveOn) {
+        liveNextAt = Date.now() + LIVE_INTERVAL * 1000;
+        liveCountdown = LIVE_INTERVAL;
+        _setLiveLabel();
+        if (liveTimer) clearInterval(liveTimer);
+        liveTimer = setInterval(_liveTick, 1000);
+    }
+}
 var lastPrices = {};
 var lastRefreshData = null;
 
@@ -1170,6 +1213,10 @@ function _setLiveLabel() {
         label.textContent = isMobile ? 'OFF' : '실시간 OFF';
         return;
     }
+    if (editingInterval) {
+        label.textContent = isMobile ? '수정중' : '실시간 · 주기 수정 중';
+        return;
+    }
     if (refreshing) {
         label.textContent = isMobile ? '갱신중' : '실시간 · 갱신 중...';
     } else {
@@ -1177,28 +1224,47 @@ function _setLiveLabel() {
     }
 }
 
+// 매 틱 — 실제 시각 기반으로 남은 초 재계산 (백그라운드 throttle 내성)
+function _liveTick() {
+    if (!liveOn || editingInterval) return;
+    var remaining = Math.max(0, Math.ceil((liveNextAt - Date.now()) / 1000));
+    liveCountdown = remaining;
+    _setLiveLabel();
+    if (remaining <= 0) {
+        if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+        _liveLoop();
+    }
+}
+
 function _liveLoop() {
     // 1) fetch 완료까지 대기
     refreshNow().then(function() {
         if (!liveOn) return;
-        // 2) 5초 카운트다운
+        // 2) 다음 fetch 시각 + 1초 틱 시작
+        liveNextAt = Date.now() + LIVE_INTERVAL * 1000;
         liveCountdown = LIVE_INTERVAL;
         _setLiveLabel();
-        liveTimer = setInterval(function() {
-            liveCountdown -= 1;
-            _setLiveLabel();
-            if (liveCountdown <= 0) {
-                clearInterval(liveTimer);
-                liveTimer = null;
-                if (liveOn) _liveLoop();   // 체인: 다음 fetch
-            }
-        }, 1000);
+        if (liveTimer) clearInterval(liveTimer);
+        liveTimer = setInterval(_liveTick, 1000);
     });
 }
+
+// 탭 다시 보이면 — 만료됐으면 즉시 fetch, 아니면 라벨만 갱신
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState !== 'visible') return;
+    if (!liveOn || editingInterval) return;
+    if (Date.now() >= liveNextAt) {
+        if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+        _liveLoop();
+    } else {
+        _liveTick();
+    }
+});
 
 function toggleLive() {
     var btn = document.getElementById('live-btn');
     var dot = document.getElementById('live-dot');
+    var wrap = document.getElementById('live-interval-wrap');
     if (liveOn) {
         liveOn = false;
         if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
@@ -1208,12 +1274,14 @@ function toggleLive() {
         dot.classList.add('bg-muted');
         btn.classList.remove('bg-toss/15', 'text-toss');
         btn.classList.add('bg-elevated', 'text-muted');
+        if (wrap) { wrap.classList.add('hidden'); wrap.classList.remove('flex'); }
     } else {
         liveOn = true;
         dot.classList.remove('bg-muted');
         dot.classList.add('bg-[#F04452]', 'live-dot');
         btn.classList.remove('bg-elevated', 'text-muted');
         btn.classList.add('bg-toss/15', 'text-toss');
+        if (wrap) { wrap.classList.remove('hidden'); wrap.classList.add('flex'); }
         _setLiveLabel();
         _liveLoop();
     }
@@ -1540,10 +1608,25 @@ function toggleHidden(id, btn) {
         .then(function(r) { return r.json(); })
         .then(function(d) {
             btn.disabled = false;
-            if (d && d.status === 'ok') {
-                // 페이지 새로고침해서 모든 집계 / 시각화 일관 적용
-                location.reload();
-            }
+            if (!d || d.status !== 'ok') return;
+            var isHidden = !!d.is_hidden;
+            // 같은 holding id 의 모든 인스턴스 (테이블 행 + 모바일 카드 + 닫힌 포지션)
+            document.querySelectorAll('[data-holding="' + id + '"]').forEach(function(row) {
+                row.classList.toggle('is-hidden-row', isHidden);
+                row.querySelectorAll('.hidden-chip').forEach(function(chip) {
+                    chip.classList.toggle('hidden', !isHidden);
+                });
+                row.querySelectorAll('.row-action-btn').forEach(function(b) {
+                    b.classList.toggle('active', isHidden);
+                    b.title = isHidden ? '집계에 다시 포함' : '집계에서 숨기기';
+                    var off = b.querySelector('.icon-eye-off');
+                    var on = b.querySelector('.icon-eye-on');
+                    if (off) off.classList.toggle('hidden', !isHidden);
+                    if (on) on.classList.toggle('hidden', isHidden);
+                });
+            });
+            // 집계 (hero / by_account / by_currency) 는 서버 refresh 가 다시 줌
+            refreshNow();
         })
         .catch(function() { btn.disabled = false; });
 }
@@ -1600,6 +1683,19 @@ window.addEventListener('beforeunload', function() {
 
 applyMask();
 renderFx();
+
+// ───────── 라이브 갱신 주기 입력 바인딩 ─────────
+_loadLiveInterval();
+(function() {
+    var input = document.getElementById('live-interval');
+    if (!input) return;
+    input.addEventListener('focus', _onIntervalFocus);
+    input.addEventListener('blur', _onIntervalCommit);
+    // Enter → blur → commit 트리거
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    });
+})();
 
 // ───────── 관심 종목 ─────────
 var lastWatchPrices = {};

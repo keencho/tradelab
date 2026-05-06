@@ -405,7 +405,8 @@ function submitInit() {
 // ─── 라이브 폴링 ───
 var liveOn = false;
 var liveTimer = null;
-var REFRESH_INTERVAL = 5000;
+var liveNextAt = 0;             // Date.now() ms
+var REFRESH_INTERVAL = 5000;    // 5초 고정
 
 function refreshNow() {
     var btn = document.getElementById('refresh-btn');
@@ -421,10 +422,20 @@ function refreshNow() {
         .catch(e => console.error('refresh', e))
         .finally(() => { if (icon) icon.classList.remove('spin'); });
 }
+function _liveTick() {
+    if (!liveOn) return;
+    if (Date.now() >= liveNextAt) {
+        if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+        _liveLoop();
+    }
+}
 function _liveLoop() {
     if (!liveOn) return;
     refreshNow().finally(() => {
-        if (liveOn) liveTimer = setTimeout(_liveLoop, REFRESH_INTERVAL);
+        if (!liveOn) return;
+        liveNextAt = Date.now() + REFRESH_INTERVAL;
+        if (liveTimer) clearInterval(liveTimer);
+        liveTimer = setInterval(_liveTick, 1000);
     });
 }
 function toggleLive() {
@@ -441,9 +452,19 @@ function toggleLive() {
         dot.classList.remove('bg-[#F04452]', 'live-dot'); dot.classList.add('bg-muted');
         label.textContent = 'OFF';
         btn.classList.add('text-muted'); btn.classList.remove('text-white');
-        if (liveTimer) clearTimeout(liveTimer);
+        if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
     }
 }
+
+// 백그라운드 탭 throttle 대응 — 다시 보일 때 만료됐으면 즉시 fetch
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState !== 'visible') return;
+    if (!liveOn) return;
+    if (Date.now() >= liveNextAt) {
+        if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+        _liveLoop();
+    }
+});
 
 // ─── 렌더 ───
 function applyRefresh(data) {
