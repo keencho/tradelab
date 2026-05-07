@@ -490,21 +490,59 @@ def _is_kr_regular_session(now=None) -> bool:
     return 9 * 60 <= minutes < 15 * 60 + 30
 
 
+_KR_LASTCLOSE_CACHE: dict[str, tuple[float, str, str]] = {}  # ticker -> (prev_close, name, yyyy-mm-dd)
+
+
+def _fetch_kr_lastclose(ticker: str) -> tuple[float, str]:
+    """전일 KRX 정확한 종가 + 종목명 — m.stock integration. 거래일 단위 캐시."""
+    today = datetime.now(KST).strftime("%Y-%m-%d")
+    cached = _KR_LASTCLOSE_CACHE.get(ticker)
+    if cached and cached[2] == today:
+        return cached[0], cached[1]
+
+    try:
+        from data.signal_collectors import _parse_naver_number
+        resp = httpx.get(
+            f"https://m.stock.naver.com/api/stock/{ticker}/integration",
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        prev_close = 0.0
+        for x in data.get("totalInfos", []):
+            if x.get("code") == "lastClosePrice":
+                prev_close = _parse_naver_number(x.get("value", "0"))
+                break
+        name = data.get("stockName", "")
+        if prev_close > 0:
+            _KR_LASTCLOSE_CACHE[ticker] = (prev_close, name, today)
+        return prev_close, name
+    except Exception as e:
+        logger.error(f"integration [{ticker}]: {e}")
+        return 0.0, ""
+
+
 def _fetch_price(ticker: str, market: str) -> dict:
     """마켓별 실시간 가격 fetch.
 
-    한국주식 우선순위 (토스 표시가와 매칭):
-    1) 정규장 시간 (KST 평일 09:00~15:30) — polling.finance.naver.com (KRX 7초 갱신)
-       토스는 NXT 무시하고 KRX 정규장 가격만 표시. NXT 호가는 거래량 적어 KRX 와 괴리 큼.
-    2) 정규장 외 + NXT OPEN — m.stock basic 의 overMarketPriceInfo (NXT 시간외 단일가)
-    3) 폴백 — m.stock basic closePrice (분 단위 stale 가능)
+    한국주식 (토스 표시가와 매칭):
+    - 정규장 (KST 평일 09:00~15:30):
+        현재가 = polling.finance.naver.com (KRX 7초 갱신)
+        전일종가 = m.stock /integration lastClosePrice (정확한 KRX 어제 종가, 거래일 캐시)
+        change_pct = (현재가 - 전일종가) / 전일종가 * 100  (직접 계산)
+        ※ polling 응답의 compareToPreviousClosePrice/fluctuationsRatio 는 부호/기준이
+          가끔 잘못 반환되므로 신뢰 불가 — 직접 계산이 정확.
+    - 정규장 외 + NXT OPEN: NXT 시간외 단일가 (m.stock basic overMarketPriceInfo)
+    - 폴백: m.stock basic closePrice
     """
     try:
         if market == "kr_stock":
             from data.signal_collectors import _parse_naver_number
 
-            # 1) 정규장 — polling.finance.naver.com (KRX 7초 갱신)
+            # 정규장 — polling 현재가 + integration 전일종가, % 는 직접 계산
             if _is_kr_regular_session():
+                prev_close, stock_name = _fetch_kr_lastclose(ticker)
                 try:
                     poll_resp = httpx.get(
                         f"https://polling.finance.naver.com/api/realtime/domestic/stock/{ticker}",
@@ -521,6 +559,15 @@ def _fetch_price(ticker: str, market: str) -> dict:
                         d = datas[0]
                         cur = _parse_naver_number(d.get("closePrice", "0"))
                         if cur > 0:
+                            name = stock_name or d.get("stockName", "")
+                            if prev_close > 0:
+                                return {
+                                    "price": cur,
+                                    "prev_close": prev_close,
+                                    "change_pct": (cur - prev_close) / prev_close * 100,
+                                    "name": name,
+                                }
+                            # integration 실패 — polling 응답으로 폴백 (부정확할 수 있음)
                             diff_abs = _parse_naver_number(d.get("compareToPreviousClosePrice", "0"))
                             pct_abs = _parse_naver_number(d.get("fluctuationsRatio", "0"))
                             code = ((d.get("compareToPreviousPrice") or {}).get("code") or "")
@@ -529,12 +576,12 @@ def _fetch_price(ticker: str, market: str) -> dict:
                                 "price": cur,
                                 "prev_close": cur - diff_abs * sign,
                                 "change_pct": pct_abs * sign,
-                                "name": d.get("stockName", ""),
+                                "name": name,
                             }
                 except Exception as e:
                     logger.error(f"polling.finance.naver [{ticker}]: {e}")
 
-            # 2) 정규장 외 — m.stock basic 의 NXT 시간외 단일가 우선
+            # 정규장 외 — m.stock basic + NXT 시간외 분기
             basic_resp = httpx.get(
                 f"https://m.stock.naver.com/api/stock/{ticker}/basic",
                 headers={"User-Agent": "Mozilla/5.0"},
@@ -560,7 +607,7 @@ def _fetch_price(ticker: str, market: str) -> dict:
                             "name": stock_name,
                         }
 
-            # 3) 폴백 — m.stock basic closePrice (분 단위 stale 가능)
+            # 폴백
             close_price = _parse_naver_number(basic.get("closePrice", "0"))
             close_diff = _parse_naver_number(basic.get("compareToPreviousClosePrice", "0"))
             close_pct = _parse_naver_number(basic.get("fluctuationsRatio", "0"))
