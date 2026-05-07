@@ -481,6 +481,15 @@ def _fetch_crypto_candles(ticker: str, interval: str, period: str) -> list[dict]
 
 # ── 내부 함수 ─────────────────────────────────────────────────
 
+def _is_kr_regular_session(now=None) -> bool:
+    """KST 평일 09:00 ~ 15:30 — 정규장 진행 중."""
+    n = now or datetime.now(KST)
+    if n.weekday() >= 5:
+        return False
+    minutes = n.hour * 60 + n.minute
+    return 9 * 60 <= minutes < 15 * 60 + 30
+
+
 def _fetch_price(ticker: str, market: str) -> dict:
     """마켓별 실시간 가격 fetch."""
     try:
@@ -497,19 +506,21 @@ def _fetch_price(ticker: str, market: str) -> dict:
             close_diff = _parse_naver_number(data.get("compareToPreviousClosePrice", "0"))
             close_pct = _parse_naver_number(data.get("fluctuationsRatio", "0"))
 
-            # NXT(넥스트레이드) 시간 외 — overMarketPriceInfo.overMarketStatus == OPEN 이면 우선 사용
-            over = data.get("overMarketPriceInfo") or {}
-            if over.get("overMarketStatus") == "OPEN":
-                over_price = _parse_naver_number(over.get("overPrice", "0"))
-                if over_price > 0:
-                    over_diff = _parse_naver_number(over.get("compareToPreviousClosePrice", "0"))
-                    over_pct = _parse_naver_number(over.get("fluctuationsRatio", "0"))
-                    return {
-                        "price": over_price,
-                        "prev_close": over_price - over_diff,
-                        "change_pct": over_pct,
-                        "name": data.get("stockName", ""),
-                    }
+            # NXT(넥스트레이드) 시간 외 — 정규장 시간에는 무시하고, 그 외 시간에만 OPEN 일 때 사용
+            # (정규장 중에도 overMarketStatus=OPEN 이 박혀있는 경우가 있어 시간 기반 가드 추가)
+            if not _is_kr_regular_session():
+                over = data.get("overMarketPriceInfo") or {}
+                if over.get("overMarketStatus") == "OPEN":
+                    over_price = _parse_naver_number(over.get("overPrice", "0"))
+                    if over_price > 0:
+                        over_diff = _parse_naver_number(over.get("compareToPreviousClosePrice", "0"))
+                        over_pct = _parse_naver_number(over.get("fluctuationsRatio", "0"))
+                        return {
+                            "price": over_price,
+                            "prev_close": over_price - over_diff,
+                            "change_pct": over_pct,
+                            "name": data.get("stockName", ""),
+                        }
 
             return {
                 "price": close_price,
