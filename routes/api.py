@@ -495,6 +495,44 @@ def _fetch_price(ticker: str, market: str) -> dict:
     try:
         if market == "kr_stock":
             from data.signal_collectors import _parse_naver_number
+
+            # 정규장 (KST 평일 09:00~15:30): polling.finance.naver.com — 7초 단위 실시간
+            # m.stock.naver.com/.../basic 은 분 단위 지연이라 폴링 부적합
+            if _is_kr_regular_session():
+                try:
+                    resp = httpx.get(
+                        f"https://polling.finance.naver.com/api/realtime/domestic/stock/{ticker}",
+                        headers={
+                            "User-Agent": "Mozilla/5.0",
+                            "Referer": "https://finance.naver.com/",
+                        },
+                        timeout=10,
+                    )
+                    resp.raise_for_status()
+                    payload = resp.json()
+                    datas = payload.get("datas") or []
+                    if datas:
+                        d = datas[0]
+                        cur = _parse_naver_number(d.get("closePrice", "0"))
+                        diff_abs = _parse_naver_number(d.get("compareToPreviousClosePrice", "0"))
+                        pct_abs = _parse_naver_number(d.get("fluctuationsRatio", "0"))
+                        # 부호: compareToPreviousPrice.code — 4/5 = 하한/하락, 그 외 양수/보합
+                        code = ((d.get("compareToPreviousPrice") or {}).get("code") or "")
+                        sign = -1 if code in ("4", "5") else 1
+                        diff = diff_abs * sign
+                        pct = pct_abs * sign
+                        if cur > 0:
+                            return {
+                                "price": cur,
+                                "prev_close": cur - diff,
+                                "change_pct": pct,
+                                "name": d.get("stockName", ""),
+                            }
+                except Exception as e:
+                    logger.error(f"polling.finance.naver [{ticker}]: {e}")
+                # polling 실패 시 아래 basic API 로 폴백
+
+            # 그 외 (장 끝남, 주말, 폴링 실패) — m.stock.naver.com basic API + NXT 시간외 분기
             resp = httpx.get(
                 f"https://m.stock.naver.com/api/stock/{ticker}/basic",
                 headers={"User-Agent": "Mozilla/5.0"},
@@ -507,7 +545,6 @@ def _fetch_price(ticker: str, market: str) -> dict:
             close_pct = _parse_naver_number(data.get("fluctuationsRatio", "0"))
 
             # NXT(넥스트레이드) 시간 외 — 정규장 시간에는 무시하고, 그 외 시간에만 OPEN 일 때 사용
-            # (정규장 중에도 overMarketStatus=OPEN 이 박혀있는 경우가 있어 시간 기반 가드 추가)
             if not _is_kr_regular_session():
                 over = data.get("overMarketPriceInfo") or {}
                 if over.get("overMarketStatus") == "OPEN":
