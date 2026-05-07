@@ -98,6 +98,26 @@
     border-top: 1px solid var(--line);
     line-height: 1.5;
   }
+  .opt-group {
+    display: flex; flex-direction: column; gap: 4px;
+    border-top: 1px solid var(--line);
+    padding-top: 8px;
+  }
+  .opt-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 0;
+    cursor: pointer;
+    user-select: none;
+  }
+  .opt-row input[type=checkbox] {
+    accent-color: var(--accent);
+    cursor: pointer;
+    margin: 0;
+  }
+  .opt-row span {
+    font-size: 12px;
+    color: var(--fg);
+  }
 </style>
 </head>
 <body>
@@ -114,6 +134,13 @@
     <label>비밀번호</label>
     <input id="pw" type="password" autocomplete="off" />
   </div>
+  <h2 style="margin-top:6px">자산 모드 표시</h2>
+  <div class="opt-group">
+    <label class="opt-row"><input type="checkbox" id="opt-hero"><span>총 평가/손익 (히어로)</span></label>
+    <label class="opt-row"><input type="checkbox" id="opt-holdings"><span>보유 종목</span></label>
+    <label class="opt-row"><input type="checkbox" id="opt-currency"><span>통화별 합계</span></label>
+    <label class="opt-row"><input type="checkbox" id="opt-account"><span>계좌별 합계</span></label>
+  </div>
   <div class="row">
     <button id="save" class="primary">저장</button>
     <button id="test" class="sec">접속 테스트</button>
@@ -128,10 +155,19 @@ import { fetch as tFetch } from "https://esm.sh/@tauri-apps/plugin-http@2";
 const store = new LazyStore("settings.json");
 const $ = (id) => document.getElementById(id);
 
+async function loadBool(key, def) {
+  const v = await store.get(key);
+  return v === undefined || v === null ? def : !!v;
+}
+
 (async () => {
   $("base").value = (await store.get("base_url")) || "";
   $("user").value = (await store.get("user")) || "";
   $("pw").value = (await store.get("pw")) || "";
+  $("opt-hero").checked = await loadBool("my_show_hero", true);
+  $("opt-holdings").checked = await loadBool("my_show_holdings", true);
+  $("opt-currency").checked = await loadBool("my_show_currency", false);
+  $("opt-account").checked = await loadBool("my_show_account", false);
 })();
 
 function setMsg(text, kind = "") {
@@ -144,6 +180,10 @@ $("save").onclick = async () => {
   await store.set("base_url", $("base").value.trim());
   await store.set("user", $("user").value.trim());
   await store.set("pw", $("pw").value);
+  await store.set("my_show_hero", $("opt-hero").checked);
+  await store.set("my_show_holdings", $("opt-holdings").checked);
+  await store.set("my_show_currency", $("opt-currency").checked);
+  await store.set("my_show_account", $("opt-account").checked);
   await store.save();
   setMsg("저장됨", "ok");
 };

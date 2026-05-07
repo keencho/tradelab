@@ -66,6 +66,34 @@
   }
   .titlebar button:hover { background: rgba(255,255,255,0.08); color: var(--fg); }
   .titlebar button.active { color: var(--accent); }
+
+  /* 모드 토글 칩 */
+  .mode-toggle {
+    -webkit-app-region: no-drag;
+    display: flex;
+    background: rgba(255,255,255,0.04);
+    border-radius: 999px;
+    padding: 2px;
+    gap: 0;
+    height: 20px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .mode-toggle button {
+    width: auto !important;
+    height: 16px !important;
+    padding: 0 8px !important;
+    border-radius: 999px !important;
+    font-size: 10px !important;
+    color: var(--dim);
+    background: transparent;
+  }
+  .mode-toggle button.on {
+    background: rgba(58,130,247,0.18);
+    color: var(--accent);
+  }
+  .mode-toggle button:hover { background: rgba(255,255,255,0.06); }
+  .mode-toggle button.on:hover { background: rgba(58,130,247,0.25); }
   .body {
     flex: 1;
     overflow-y: auto;
@@ -169,6 +197,66 @@
     line-height: 1.5;
   }
 
+  /* 자산 뷰 — 섹션 */
+  .sec-title {
+    font-size: 9px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 6px 6px 2px;
+    font-weight: 600;
+  }
+  .hero-card {
+    background: linear-gradient(135deg, rgba(58,130,247,0.10), rgba(58,130,247,0.02));
+    border: 1px solid rgba(58,130,247,0.18);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 4px 6px;
+  }
+  .hero-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 8px;
+  }
+  .hero-row + .hero-row { margin-top: 4px; }
+  .hero-label { font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.4px; }
+  .hero-val { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .hero-pnl { font-size: 11px; font-variant-numeric: tabular-nums; }
+
+  /* 보유 종목 — 카드 형태 */
+  .hrow {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    padding: 6px 6px;
+    border-bottom: 1px solid var(--line);
+    gap: 8px;
+  }
+  .hrow:last-child { border-bottom: 0; }
+  .hrow .hleft { min-width: 0; }
+  .hrow .hname { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hrow .hsub { font-size: 9px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .hrow .hright { text-align: right; }
+  .hrow .hval { font-variant-numeric: tabular-nums; font-size: 12px; }
+  .hrow .hpct { font-size: 10px; font-variant-numeric: tabular-nums; }
+  .hrow.hidden-row { opacity: 0.45; }
+
+  /* 통화/계좌 미니 카드 */
+  .mini-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 0 6px;
+  }
+  .mini-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 8px;
+  }
+  .mini-label { font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.4px; }
+  .mini-val { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .mini-pct { font-size: 10px; font-variant-numeric: tabular-nums; margin-top: 1px; }
+
   /* 매우 작아질 때 — 타이틀바만 남는 모드 자동 (body 가 0이 되면 자연스럽게) */
   .frame.compact .body { display: none; }
   .frame.compact .footer { display: none; }
@@ -178,6 +266,10 @@
 <div class="frame" id="frame">
   <div class="titlebar">
     <div class="drag"><span class="title" id="title">TradeLab</span></div>
+    <div class="mode-toggle">
+      <button id="mode-watch" class="on">관심</button>
+      <button id="mode-my">자산</button>
+    </div>
     <button id="btn-refresh" title="새로고침">↻</button>
     <button id="btn-pin" class="active" title="항상 위">📌</button>
     <button id="btn-settings" title="설정">⚙</button>
@@ -206,6 +298,9 @@ const win = getCurrentWindow();
 const $ = (id) => document.getElementById(id);
 
 let currentItems = [];
+let lastData = null;
+let mode = "watch";        // "watch" | "my"
+let myOpts = { hero: true, holdings: true, currency: false, account: false };
 let pinned = true;
 let liveOn = false;
 let liveTimer = null;
@@ -213,17 +308,34 @@ let liveNextAt = 0;
 let intervalSec = 5;
 let editingInterval = false;
 
+async function _loadBool(key, def) {
+  const v = await store.get(key);
+  return v === undefined || v === null ? def : !!v;
+}
+
 async function loadCfg() {
   const base = (await store.get("base_url")) || "";
   const user = (await store.get("user")) || "";
   const pw = (await store.get("pw")) || "";
   const live = (await store.get("live_on"));
   const sec = Number(await store.get("interval")) || 5;
+  const savedMode = (await store.get("mode")) || "watch";
   intervalSec = Math.max(3, Math.min(300, sec));
   liveOn = live === true;
+  mode = (savedMode === "my") ? "my" : "watch";
+  myOpts.hero      = await _loadBool("my_show_hero", true);
+  myOpts.holdings  = await _loadBool("my_show_holdings", true);
+  myOpts.currency  = await _loadBool("my_show_currency", false);
+  myOpts.account   = await _loadBool("my_show_account", false);
   $("interval").value = intervalSec;
   updateLiveBtn();
+  updateModeBtn();
   return { base, user, pw };
+}
+
+function updateModeBtn() {
+  $("mode-watch").classList.toggle("on", mode === "watch");
+  $("mode-my").classList.toggle("on", mode === "my");
 }
 
 async function saveLiveCfg() {
@@ -265,7 +377,7 @@ function escape_(s) {
   }[c]));
 }
 
-function render(items) {
+function renderWatch(items) {
   currentItems = items || [];
   const body = $("body");
   if (currentItems.length === 0) {
@@ -285,6 +397,142 @@ function render(items) {
     </div>
   `).join("");
   attachDnD();
+}
+
+function fmtMoney(n, ccy) {
+  const v = Math.round(Number(n || 0));
+  if (ccy === "KRW") return "₩" + v.toLocaleString("ko-KR");
+  if (ccy === "USD") return "$" + v.toLocaleString("en-US");
+  return v.toLocaleString();
+}
+
+function curOf(market, holdingCcy) {
+  // 보유 종목 기본 통화 추정 (응답에 ccy 가 없을 때)
+  if (holdingCcy) return holdingCcy;
+  if (market === "kr_stock") return "KRW";
+  if (market === "us_stock") return "USD";
+  return "KRW";
+}
+
+function renderMy(data) {
+  const body = $("body");
+  data = data || {};
+  const holdings = data.holdings || [];
+  const byCcy = data.by_currency || {};
+  const byAcc = data.by_account || {};
+
+  const sections = [];
+
+  if (myOpts.hero) {
+    const ccyKeys = Object.keys(byCcy);
+    if (ccyKeys.length === 0) {
+      sections.push(`
+        <div class="hero-card">
+          <div class="hero-row">
+            <span class="hero-label">자산</span>
+            <span class="hero-val" style="color:var(--dim)">—</span>
+          </div>
+          <div class="hero-row">
+            <span class="hero-label">보유 없음</span>
+          </div>
+        </div>
+      `);
+    } else {
+      sections.push(`<div class="hero-card">${ccyKeys.map(c => {
+        const a = byCcy[c] || {};
+        const evalAmt = a.eval || 0;
+        const cost = a.cost || 0;
+        const unr = a.unrealized || 0;
+        const pct = cost > 0 ? (unr / cost * 100) : 0;
+        const cls = pctClass(unr);
+        const sign = unr >= 0 ? "+" : "";
+        return `
+          <div class="hero-row">
+            <span class="hero-label">${escape_(c)}</span>
+            <span class="hero-val">${fmtMoney(evalAmt, c)}</span>
+          </div>
+          <div class="hero-row">
+            <span class="hero-label">평가손익</span>
+            <span class="hero-pnl ${cls}">${sign}${fmtMoney(unr, c)} (${fmtPct(pct)})</span>
+          </div>
+        `;
+      }).join('<div style="height:1px;background:var(--line);margin:6px 0"></div>')}</div>`);
+    }
+  }
+
+  if (myOpts.holdings) {
+    sections.push(`<div class="sec-title">보유 종목</div>`);
+    if (holdings.length === 0) {
+      sections.push(`<div class="empty">보유 종목 없음</div>`);
+    } else {
+      sections.push(holdings.map(h => {
+        const ccy = curOf(h.market, "");
+        const evalAmt = h.eval_amount || 0;
+        const upct = h.unrealized_pct || 0;
+        const cls = pctClass(upct);
+        const sign = upct >= 0 ? "+" : "";
+        const hidden = h.is_hidden ? "hidden-row" : "";
+        return `
+          <div class="hrow ${hidden}">
+            <div class="hleft">
+              <div class="hname">${escape_(h.ticker_name || h.ticker)}</div>
+              <div class="hsub">${escape_(h.ticker)} · ${h.qty} 주</div>
+            </div>
+            <div class="hright">
+              <div class="hval">${fmtMoney(evalAmt, ccy)}</div>
+              <div class="hpct ${cls}">${sign}${upct.toFixed(2)}%</div>
+            </div>
+          </div>
+        `;
+      }).join(""));
+    }
+  }
+
+  if (myOpts.currency && Object.keys(byCcy).length > 0) {
+    sections.push(`<div class="sec-title">통화별</div>`);
+    sections.push(`<div class="mini-grid">${Object.keys(byCcy).map(c => {
+      const a = byCcy[c];
+      const pct = a.cost > 0 ? (a.unrealized / a.cost * 100) : 0;
+      const cls = pctClass(pct);
+      const sign = pct >= 0 ? "+" : "";
+      return `
+        <div class="mini-card">
+          <div class="mini-label">${escape_(c)}</div>
+          <div class="mini-val">${fmtMoney(a.eval, c)}</div>
+          <div class="mini-pct ${cls}">${sign}${pct.toFixed(2)}%</div>
+        </div>
+      `;
+    }).join("")}</div>`);
+  }
+
+  if (myOpts.account && Object.keys(byAcc).length > 0) {
+    sections.push(`<div class="sec-title">계좌별</div>`);
+    sections.push(`<div class="mini-grid">${Object.keys(byAcc).map(id => {
+      const a = byAcc[id];
+      const ccy = a.currency || "KRW";
+      const pct = a.cost > 0 ? (a.unrealized / a.cost * 100) : 0;
+      const cls = pctClass(pct);
+      const sign = pct >= 0 ? "+" : "";
+      return `
+        <div class="mini-card">
+          <div class="mini-label">#${escape_(id)} · ${escape_(ccy)}</div>
+          <div class="mini-val">${fmtMoney(a.eval, ccy)}</div>
+          <div class="mini-pct ${cls}">${sign}${pct.toFixed(2)}%</div>
+        </div>
+      `;
+    }).join("")}</div>`);
+  }
+
+  if (sections.length === 0) {
+    body.innerHTML = '<div class="empty">표시할 항목 없음<br><span style="font-size:10px">⚙ 에서 옵션 켜기</span></div>';
+  } else {
+    body.innerHTML = sections.join("");
+  }
+}
+
+function renderAll() {
+  if (mode === "watch") renderWatch((lastData && lastData.watches) || []);
+  else renderMy(lastData || {});
 }
 
 // ── DnD 순서 변경 ────────────────────────
@@ -342,7 +590,8 @@ async function refresh() {
   const cfg = await loadCfg();
   if (!cfg.base || !cfg.user) {
     $("status").textContent = "설정필요";
-    render([]);
+    lastData = { watches: [] };
+    renderAll();
     return;
   }
   try {
@@ -354,8 +603,8 @@ async function refresh() {
       $("status").textContent = `HTTP ${res.status}`;
       return;
     }
-    const data = await res.json();
-    render(data.watches || []);
+    lastData = await res.json();
+    renderAll();
     $("status").textContent = new Date().toTimeString().slice(0, 8);
   } catch (e) {
     $("status").textContent = "오류";
@@ -428,6 +677,16 @@ $("btn-pin").onclick = async () => {
 };
 $("btn-settings").onclick = openSettings;
 
+async function setMode(m) {
+  mode = (m === "my") ? "my" : "watch";
+  await store.set("mode", mode);
+  await store.save();
+  updateModeBtn();
+  renderAll();
+}
+$("mode-watch").onclick = () => setMode("watch");
+$("mode-my").onclick = () => setMode("my");
+
 $("live-toggle").onclick = () => setLive(!liveOn);
 
 $("interval").addEventListener("focus", () => {
@@ -460,7 +719,10 @@ ro.observe(document.body);
   if (liveOn) liveLoop();
 })();
 
-window.addEventListener("focus", () => {
+window.addEventListener("focus", async () => {
+  // 설정창에서 옵션 바꾸고 돌아왔을 수 있음 — 옵션 reload + 다시 그리기
+  await loadCfg();
+  if (lastData) renderAll();
   if (liveOn && Date.now() >= liveNextAt) liveLoop();
 });
 </script>

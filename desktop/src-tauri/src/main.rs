@@ -33,7 +33,7 @@ fn open_settings(app: &AppHandle) {
     }
     let _ = WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("settings.html".into()))
         .title("설정")
-        .inner_size(360.0, 280.0)
+        .inner_size(360.0, 460.0)
         .resizable(false)
         .always_on_top(true)
         .skip_taskbar(true)
