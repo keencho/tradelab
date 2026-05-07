@@ -493,44 +493,17 @@ def _is_kr_regular_session(now=None) -> bool:
 def _fetch_price(ticker: str, market: str) -> dict:
     """마켓별 실시간 가격 fetch.
 
-    한국주식 우선순위 (토스 등 NXT-aware 앱과 매칭):
-    1) NXT (넥스트레이드) — overMarketStatus=OPEN + overPrice>0 이면 우선 사용
-       - NXT 는 정규장 시간 (REGULAR_MARKET) + 시간외 단일가 모두 운영중
-       - m.stock basic 응답에 NXT 가격이 거의 즉시 갱신되어 들어옴
-    2) KRX 실시간 — 정규장 시간이면 polling.finance.naver.com (7초 단위)
-    3) 폴백 — m.stock basic 의 closePrice (분 단위 stale 가능)
+    한국주식 우선순위 (토스 표시가와 매칭):
+    1) 정규장 시간 (KST 평일 09:00~15:30) — polling.finance.naver.com (KRX 7초 갱신)
+       토스는 NXT 무시하고 KRX 정규장 가격만 표시. NXT 호가는 거래량 적어 KRX 와 괴리 큼.
+    2) 정규장 외 + NXT OPEN — m.stock basic 의 overMarketPriceInfo (NXT 시간외 단일가)
+    3) 폴백 — m.stock basic closePrice (분 단위 stale 가능)
     """
     try:
         if market == "kr_stock":
             from data.signal_collectors import _parse_naver_number
 
-            # 1) m.stock basic — NXT + KRX 종가/종목명 한 번에
-            basic_resp = httpx.get(
-                f"https://m.stock.naver.com/api/stock/{ticker}/basic",
-                headers={"User-Agent": "Mozilla/5.0"},
-                timeout=10,
-            )
-            basic_resp.raise_for_status()
-            basic = basic_resp.json()
-            stock_name = basic.get("stockName", "")
-
-            # NXT 가격 우선 — 정규장 동시 운영 + 시간외 단일가 모두
-            over = basic.get("overMarketPriceInfo") or {}
-            if over.get("overMarketStatus") == "OPEN":
-                over_price = _parse_naver_number(over.get("overPrice", "0"))
-                if over_price > 0:
-                    over_diff_abs = _parse_naver_number(over.get("compareToPreviousClosePrice", "0"))
-                    over_pct_abs = _parse_naver_number(over.get("fluctuationsRatio", "0"))
-                    over_code = ((over.get("compareToPreviousPrice") or {}).get("code") or "")
-                    over_sign = -1 if over_code in ("4", "5") else 1
-                    return {
-                        "price": over_price,
-                        "prev_close": over_price - over_diff_abs * over_sign,
-                        "change_pct": over_pct_abs * over_sign,
-                        "name": stock_name,
-                    }
-
-            # 2) 정규장이면 polling.finance.naver.com — KRX 7초 단위 실시간
+            # 1) 정규장 — polling.finance.naver.com (KRX 7초 갱신)
             if _is_kr_regular_session():
                 try:
                     poll_resp = httpx.get(
@@ -556,12 +529,38 @@ def _fetch_price(ticker: str, market: str) -> dict:
                                 "price": cur,
                                 "prev_close": cur - diff_abs * sign,
                                 "change_pct": pct_abs * sign,
-                                "name": d.get("stockName", "") or stock_name,
+                                "name": d.get("stockName", ""),
                             }
                 except Exception as e:
                     logger.error(f"polling.finance.naver [{ticker}]: {e}")
 
-            # 3) 폴백 — m.stock basic 의 closePrice (분 단위 stale 가능)
+            # 2) 정규장 외 — m.stock basic 의 NXT 시간외 단일가 우선
+            basic_resp = httpx.get(
+                f"https://m.stock.naver.com/api/stock/{ticker}/basic",
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=10,
+            )
+            basic_resp.raise_for_status()
+            basic = basic_resp.json()
+            stock_name = basic.get("stockName", "")
+
+            if not _is_kr_regular_session():
+                over = basic.get("overMarketPriceInfo") or {}
+                if over.get("overMarketStatus") == "OPEN":
+                    over_price = _parse_naver_number(over.get("overPrice", "0"))
+                    if over_price > 0:
+                        over_diff_abs = _parse_naver_number(over.get("compareToPreviousClosePrice", "0"))
+                        over_pct_abs = _parse_naver_number(over.get("fluctuationsRatio", "0"))
+                        over_code = ((over.get("compareToPreviousPrice") or {}).get("code") or "")
+                        over_sign = -1 if over_code in ("4", "5") else 1
+                        return {
+                            "price": over_price,
+                            "prev_close": over_price - over_diff_abs * over_sign,
+                            "change_pct": over_pct_abs * over_sign,
+                            "name": stock_name,
+                        }
+
+            # 3) 폴백 — m.stock basic closePrice (분 단위 stale 가능)
             close_price = _parse_naver_number(basic.get("closePrice", "0"))
             close_diff = _parse_naver_number(basic.get("compareToPreviousClosePrice", "0"))
             close_pct = _parse_naver_number(basic.get("fluctuationsRatio", "0"))
