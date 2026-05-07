@@ -596,17 +596,17 @@ def _fetch_price(ticker: str, market: str) -> dict:
                 if over.get("overMarketStatus") == "OPEN":
                     over_price = _parse_naver_number(over.get("overPrice", "0"))
                     if over_price > 0:
-                        # 시간외 % 는 당일 정규장 종가 대비 (토스 표시 기준)
-                        # NXT 응답의 fluctuationsRatio 는 어제 종가 대비라 토스와 안 맞음
-                        regular_close = _parse_naver_number(basic.get("closePrice", "0"))
-                        if regular_close > 0:
+                        # 시간외 % 도 어제 정규장 종가 (전 거래일) 대비로 통일 — 정규장과 일관성
+                        prev_close, ic_name = _fetch_kr_lastclose(ticker)
+                        name = stock_name or ic_name
+                        if prev_close > 0:
                             return {
                                 "price": over_price,
-                                "prev_close": regular_close,
-                                "change_pct": (over_price - regular_close) / regular_close * 100,
-                                "name": stock_name,
+                                "prev_close": prev_close,
+                                "change_pct": (over_price - prev_close) / prev_close * 100,
+                                "name": name,
                             }
-                        # closePrice 없으면 어제 종가 대비로 폴백
+                        # integration 실패 — NXT 응답으로 폴백
                         over_diff_abs = _parse_naver_number(over.get("compareToPreviousClosePrice", "0"))
                         over_pct_abs = _parse_naver_number(over.get("fluctuationsRatio", "0"))
                         over_code = ((over.get("compareToPreviousPrice") or {}).get("code") or "")
@@ -615,7 +615,7 @@ def _fetch_price(ticker: str, market: str) -> dict:
                             "price": over_price,
                             "prev_close": over_price - over_diff_abs * over_sign,
                             "change_pct": over_pct_abs * over_sign,
-                            "name": stock_name,
+                            "name": name,
                         }
 
             # 폴백
