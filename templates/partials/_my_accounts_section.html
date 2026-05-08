@@ -32,6 +32,16 @@
             </div>
         </div>
         <div class="flex items-center gap-1 shrink-0">
+            {% set _all_h = holdings_by_account.get(acc.id, []) + closed_by_account.get(acc.id, []) %}
+            {% set _visible_count = _all_h | rejectattr('is_hidden') | list | length %}
+            {% set _bulk_hide = _visible_count > 0 %}
+            {% if _all_h %}
+            <button onclick="bulkAccountHide({{ acc.id }}, {{ 'true' if _bulk_hide else 'false' }})"
+                title="이 계좌 전체 {% if _bulk_hide %}숨기기{% else %}표시{% endif %}"
+                class="text-[11px] text-muted hover:text-white px-2 py-1 transition-colors rounded-md bg-elevated/30 hover:bg-elevated/60">
+                전체 {% if _bulk_hide %}숨김{% else %}표시{% endif %}
+            </button>
+            {% endif %}
             <button data-acc-id="{{ acc.id }}" data-acc-nick="{{ acc.nickname }}" onclick="openAccEditModal(+this.dataset.accId, this.dataset.accNick)"
                 title="별명 수정" class="text-xs text-muted hover:text-toss px-2 py-1 transition-colors">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

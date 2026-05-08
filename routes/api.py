@@ -1121,6 +1121,59 @@ async def my_holdings_toggle_hidden(request: Request, holding_id: int):
         session.close()
 
 
+@router.post("/my/holdings/bulk-hidden")
+async def my_holdings_bulk_hidden(request: Request):
+    """일괄 숨김 — body:
+       {scope: 'account'|'all', account_id?: int, hidden: bool,
+        qty_filter?: 'open'|'closed'|'all'  (기본 'all')}.
+    소유 계좌의 RealHolding 만 변경."""
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    body = await request.json()
+    scope = (body.get("scope") or "").strip()
+    hidden = bool(body.get("hidden"))
+    qty_filter = (body.get("qty_filter") or "all").strip()
+
+    session = SessionLocal()
+    try:
+        my_accounts = [
+            a.id for a in
+            session.query(RealAccount).filter(RealAccount.owner == user).all()
+        ]
+        if not my_accounts:
+            return {"status": "ok", "updated": 0}
+
+        q = session.query(RealHolding).filter(RealHolding.account_id.in_(my_accounts))
+
+        if scope == "account":
+            try:
+                acc_id = int(body.get("account_id") or 0)
+            except (TypeError, ValueError):
+                return JSONResponse(status_code=400, content={"error": "invalid account_id"})
+            if acc_id not in my_accounts:
+                return JSONResponse(status_code=404, content={"error": "account not found"})
+            q = q.filter(RealHolding.account_id == acc_id)
+        elif scope != "all":
+            return JSONResponse(status_code=400, content={"error": "scope must be 'account' or 'all'"})
+
+        if qty_filter == "open":
+            q = q.filter(RealHolding.qty > 0)
+        elif qty_filter == "closed":
+            q = q.filter(RealHolding.qty == 0)
+        elif qty_filter != "all":
+            return JSONResponse(status_code=400, content={"error": "qty_filter must be 'open'|'closed'|'all'"})
+
+        updated = q.update({RealHolding.is_hidden: hidden}, synchronize_session=False)
+        session.commit()
+        return {"status": "ok", "updated": updated, "is_hidden": hidden}
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        session.close()
+
+
 @router.delete("/my/trades/{trade_id}")
 async def my_trades_delete(request: Request, trade_id: int):
     user, denied = _require_user(request)

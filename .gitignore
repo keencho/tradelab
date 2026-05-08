@@ -43,5 +43,13 @@ logs/
 data/cache/
 *.csv.tmp
 
+# 일회성 import 결과물 (개인 데이터)
+import.sql
+
+# 개인 도구 (서버 환경 의존)
+scripts/oci_start.*
+scripts/probe_*.sh
+sessions.json
+
 # Jupyter
 .ipynb_checkpoints/

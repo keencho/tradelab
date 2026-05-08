@@ -4,7 +4,7 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
@@ -66,6 +66,10 @@ fn main() {
                             let _ = win.hide();
                         }
                     }
+                    // Ctrl+Shift+Q: cycle widget mode (관심 ↔ 자산)
+                    if shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::KeyQ) {
+                        let _ = app.emit("cycle-mode", ());
+                    }
                 })
                 .build(),
         )
@@ -75,8 +79,10 @@ fn main() {
             // global shortcuts
             let toggle_sc = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyX);
             let hide_sc = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyH);
+            let cycle_sc = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyQ);
             let _ = app.global_shortcut().register(toggle_sc);
             let _ = app.global_shortcut().register(hide_sc);
+            let _ = app.global_shortcut().register(cycle_sc);
 
             // tray
             let icon = app

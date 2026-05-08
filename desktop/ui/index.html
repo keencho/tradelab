@@ -15,6 +15,11 @@
     --accent: #3a82f7;
   }
   * { box-sizing: border-box; }
+  /* 클릭 시 포커스 outline 제거 (위젯엔 키보드 nav 의미 약함) */
+  *:focus { outline: none; }
+  *:focus-visible { outline: none; }
+  button, input, select { outline: none; }
+  button::-moz-focus-inner { border: 0; }
   html, body { margin: 0; padding: 0; height: 100%; background: transparent; }
   body {
     font: 11px -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
@@ -239,6 +244,19 @@
     line-height: 1;
   }
   .sec-title.collapsed .arrow { transform: rotate(-90deg); }
+  .sec-title .bulk-toggle {
+    margin-left: auto;
+    background: rgba(255,255,255,0.04);
+    border: 0;
+    color: var(--dim);
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .sec-title .bulk-toggle:hover { background: rgba(255,255,255,0.10); color: var(--fg); }
 
   /* 히어로 — 박스 없이, 통화별 원금/현재 */
   .hero-card { padding: 3px 6px; }
@@ -520,10 +538,14 @@ function curOf(market, holdingCcy) {
   return "KRW";
 }
 
-function _collapsibleHeader(key, title) {
+function _collapsibleHeader(key, title, allHidden) {
   const isC = !!collapsed[key];
+  // allHidden: true=모두 숨김상태(=>'전체 표시' 버튼), false=하나라도 보임(=>'전체 숨김')
+  const bulkLabel = allHidden ? "표시" : "숨김";
+  const bulkHidden = !allHidden;  // 클릭 시 적용할 hidden 값
   return `<div class="sec-title collapsible ${isC ? 'collapsed' : ''}" data-section="${key}">
     <span class="arrow">▼</span><span>${escape_(title)}</span>
+    <button class="bulk-toggle" data-bulk-section="${key}" data-bulk-hidden="${bulkHidden}" title="이 섹션 전체 ${bulkLabel}">전체 ${bulkLabel}</button>
   </div>`;
 }
 
@@ -537,29 +559,75 @@ function _sortHoldings(arr, key) {
   });
 }
 
+function _ccyOf(h) {
+  // holdings/closed 응답엔 currency 가 직접 안 박혀 있을 수 있음 (closed 는 있음).
+  // 보유 종목은 account_id 기준으로 by_account 에서 통화 lookup
+  if (h.currency) return h.currency;
+  return "KRW"; // 폴백
+}
+
+function _ccyAggFromArrays(holdings, closed, byAccount, opts) {
+  // 옵션에 따라 통화별 cost / eval / unrealized / realized 다시 합산
+  // - opts.holdings OFF → 보유 종목 데이터 제외
+  // - opts.closed OFF → 닫힌 포지션 데이터 + 보유 종목의 realized_pnl 제외 (= 모든 실현손익 빼기)
+  const acc2ccy = {};
+  Object.keys(byAccount || {}).forEach(id => {
+    acc2ccy[id] = (byAccount[id] || {}).currency || "KRW";
+  });
+  const out = {};
+  function ensure(c) {
+    if (!out[c]) out[c] = { cost: 0, eval: 0, unrealized: 0, realized: 0 };
+    return out[c];
+  }
+  if (opts.holdings) {
+    (holdings || []).forEach(h => {
+      if (h.is_hidden) return;
+      const c = acc2ccy[h.account_id] || "KRW";
+      const a = ensure(c);
+      a.cost += h.cost_amount || 0;
+      a.eval += h.eval_amount || 0;
+      a.unrealized += h.unrealized_pnl || 0;
+      if (opts.closed) a.realized += h.realized_pnl || 0;
+    });
+  }
+  if (opts.closed) {
+    (closed || []).forEach(h => {
+      if (h.is_hidden) return;
+      const c = h.currency || acc2ccy[h.account_id] || "KRW";
+      ensure(c).realized += h.realized_pnl || 0;
+    });
+  }
+  return out;
+}
+
 function renderMy(data) {
   const body = $("body");
   data = data || {};
   const holdings = _sortHoldings(data.holdings || [], "eval_amount");
   const closed = _sortHoldings(data.closed_holdings || [], "realized_pnl");
-  const byCcy = data.by_currency || {};
+  // hero 계산용 by_currency — 옵션에 따라 동적으로 다시 합산
+  const byCcy = _ccyAggFromArrays(data.holdings || [], data.closed_holdings || [], data.by_account || {}, myOpts);
+  // peak_invested 같은 누적 기준 데이터는 서버의 by_currency 에서 가져옴 (옵션 영향 X)
+  const serverByCcy = data.by_currency || {};
 
   const sections = [];
   let lastWasHero = false;
 
   if (myOpts.hero) {
-    const ccyKeys = Object.keys(byCcy);
+    // 통화 키는 서버 응답 기준 (옵션 OFF 라 byCcy 가 비어도 통화별 0/0/0 표시)
+    const ccyKeys = Object.keys(serverByCcy);
+    const dataAny = myOpts.holdings || myOpts.closed;
     if (ccyKeys.length === 0) {
       sections.push(`<div class="hero-card"><div class="hero-block"><div class="hero-ccy-label">자산</div><div class="hero-row"><span class="hero-label" style="color:var(--dim)">보유 없음</span></div></div></div>`);
     } else {
       sections.push(`<div class="hero-card">${ccyKeys.map(c => {
-        const a = byCcy[c] || {};
+        const a = byCcy[c] || { cost: 0, eval: 0, unrealized: 0, realized: 0 };
         const realized = a.realized || 0;
 
         let principal, current, pnl, pnlLabel;
         if (myOpts.totalBasis) {
-          // 총 누적 기준 — peak_invested = 시점별 net invested 의 최댓값 (실제 깔아둔 자본)
-          principal = a.peak_invested || 0;
+          // 총 누적 기준 — peak_invested. 두 옵션 다 OFF 면 표시 의미 없으니 0.
+          principal = dataAny ? ((serverByCcy[c] || {}).peak_invested || 0) : 0;
           pnl       = (a.unrealized || 0) + (a.realized || 0);
           current   = principal + pnl;
           pnlLabel  = "누적손익";
@@ -612,7 +680,8 @@ function renderMy(data) {
 
   if (myOpts.holdings) {
     if (lastWasHero) sections.push(`<hr class="sec-divider strong"/>`);
-    sections.push(_collapsibleHeader("holdings", "보유 종목"));
+    const allHiddenH = holdings.length > 0 && holdings.every(h => h.is_hidden);
+    sections.push(_collapsibleHeader("holdings", "보유 종목", allHiddenH));
     if (!collapsed.holdings) {
       if (holdings.length === 0) {
         sections.push(`<div class="empty">보유 종목 없음</div>`);
@@ -644,7 +713,8 @@ function renderMy(data) {
 
   if (myOpts.closed) {
     if (lastWasHero) sections.push(`<hr class="sec-divider strong"/>`);
-    sections.push(_collapsibleHeader("closed", "닫힌 포지션"));
+    const allHiddenC = closed.length > 0 && closed.every(h => h.is_hidden);
+    sections.push(_collapsibleHeader("closed", "닫힌 포지션", allHiddenC));
     if (!collapsed.closed) {
       if (closed.length === 0) {
         sections.push(`<div class="empty">닫힌 포지션 없음</div>`);
@@ -710,6 +780,15 @@ function attachMyHandlers() {
   if (_myDelegated) return;
   _myDelegated = true;
   $("body").addEventListener("click", (e) => {
+    // 일괄 토글 버튼이 collapse 헤더 안에 있어 우선순위 높게
+    const bulk = e.target.closest("button.bulk-toggle");
+    if (bulk) {
+      e.stopPropagation();
+      const sec = bulk.dataset.bulkSection;
+      const hidden = bulk.dataset.bulkHidden === "true";
+      bulkHideSection(sec, hidden);
+      return;
+    }
     const sec = e.target.closest(".sec-title.collapsible");
     if (sec) {
       toggleCollapse(sec.dataset.section);
@@ -720,6 +799,23 @@ function attachMyHandlers() {
       toggleHide(row.dataset.hideId, row);
     }
   });
+}
+
+async function bulkHideSection(sec, hidden) {
+  const cfg = await loadCfg();
+  if (!cfg.base) return;
+  const qtyFilter = sec === "closed" ? "closed" : "open";
+  try {
+    const res = await tFetch(`${cfg.base.replace(/\/$/, "")}/api/my/holdings/bulk-hidden`, {
+      method: "POST",
+      headers: {
+        "Authorization": "Basic " + btoa(`${cfg.user}:${cfg.pw}`),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ scope: "all", hidden, qty_filter: qtyFilter }),
+    });
+    if (res.ok) await refresh();
+  } catch (e) { console.error(e); }
 }
 
 function renderAll() {
@@ -921,6 +1017,12 @@ listen("settings-saved", async () => {
 // ── zoom 슬라이더 라이브 미리보기 ──
 listen("zoom-changed", (e) => {
   applyZoom(e.payload);
+}).catch(() => {});
+
+// ── Ctrl+Shift+Q: 모드 사이클 (관심 ↔ 자산) ──
+listen("cycle-mode", () => {
+  const next = (mode === "watch") ? "my" : "watch";
+  setMode(next);
 }).catch(() => {});
 
 // ── 시작 ──

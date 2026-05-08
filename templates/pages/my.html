@@ -1752,6 +1752,14 @@ function deleteAccount(id) {
         .then(function(r) { if (r.ok) refreshAfterMutation(); });
 }
 
+function bulkAccountHide(accId, hidden) {
+    fetch('/api/my/holdings/bulk-hidden', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: 'account', account_id: accId, hidden: hidden, qty_filter: 'all' }),
+    }).then(function(r) { if (r.ok) refreshAfterMutation(); });
+}
+
 function toggleHidden(id, btn) {
     btn.disabled = true;
     fetch('/api/my/holdings/' + id + '/toggle-hidden', { method: 'POST' })
