@@ -525,7 +525,7 @@ function renderWatch(items) {
 
 function fmtMoney(n, ccy) {
   const v = Math.round(Number(n || 0));
-  if (ccy === "KRW") return "₩" + v.toLocaleString("ko-KR");
+  if (ccy === "KRW") return v.toLocaleString("ko-KR") + "원";
   if (ccy === "USD") return "$" + v.toLocaleString("en-US");
   return v.toLocaleString();
 }
