@@ -528,29 +528,8 @@ async def my_report(request: Request):
         session.close()
 
 
-@router.get("/my", response_class=HTMLResponse)
-async def my_assets(request: Request):
-    denied = _auth_or_401(request)
-    if denied:
-        return denied
-    blocked = _block_local()
-    if blocked:
-        return blocked
-
-    user = get_current_user(request)
-
-    # 거래내역 필터
-    q = request.query_params.get("q", "").strip()
-    side_filter = request.query_params.get("side", "")
-    try:
-        acc_filter = int(request.query_params.get("acc", "") or 0)
-    except ValueError:
-        acc_filter = 0
-    try:
-        page = max(1, int(request.query_params.get("page", "1")))
-    except ValueError:
-        page = 1
-
+def _my_page_data(user: str, q: str, side_filter: str, acc_filter: int, page: int) -> dict:
+    """my.html 용 데이터 준비 — full 페이지/partial 라우트 공용 헬퍼."""
     session = SessionLocal()
     try:
         accounts = (
@@ -662,9 +641,7 @@ async def my_assets(request: Request):
                     "by_ccy": month_buckets.get(key, {}),
                 })
 
-        return _page_response(request, "pages/my.html", {
-            "request": request,
-            "page": "my",
+        return {
             "accounts": accounts,
             "account_map": account_map,
             "holdings_by_account": holdings_by_account,
@@ -679,6 +656,64 @@ async def my_assets(request: Request):
             "trade_page": page,
             "trade_total_pages": total_pages,
             "trade_total": total_trades,
-        })
+        }
     finally:
         session.close()
+
+
+def _parse_my_query(request: Request) -> tuple[str, str, int, int]:
+    q = request.query_params.get("q", "").strip()
+    side_filter = request.query_params.get("side", "")
+    try:
+        acc_filter = int(request.query_params.get("acc", "") or 0)
+    except ValueError:
+        acc_filter = 0
+    try:
+        page = max(1, int(request.query_params.get("page", "1")))
+    except ValueError:
+        page = 1
+    return q, side_filter, acc_filter, page
+
+
+@router.get("/my", response_class=HTMLResponse)
+async def my_assets(request: Request):
+    denied = _auth_or_401(request)
+    if denied:
+        return denied
+    blocked = _block_local()
+    if blocked:
+        return blocked
+
+    user = get_current_user(request)
+    q, side_filter, acc_filter, page = _parse_my_query(request)
+    data = _my_page_data(user, q, side_filter, acc_filter, page)
+    return _page_response(request, "pages/my.html", {
+        "request": request,
+        "page": "my",
+        **data,
+    })
+
+
+@router.get("/api/my/_partial/accounts", response_class=HTMLResponse)
+async def my_partial_accounts(request: Request):
+    denied = _auth_or_401(request)
+    if denied:
+        return denied
+    user = get_current_user(request)
+    data = _my_page_data(user, "", "", 0, 1)
+    return templates.TemplateResponse(
+        request, "partials/_my_accounts_section.html", {"request": request, **data},
+    )
+
+
+@router.get("/api/my/_partial/trades", response_class=HTMLResponse)
+async def my_partial_trades(request: Request):
+    denied = _auth_or_401(request)
+    if denied:
+        return denied
+    user = get_current_user(request)
+    q, side_filter, acc_filter, page = _parse_my_query(request)
+    data = _my_page_data(user, q, side_filter, acc_filter, page)
+    return templates.TemplateResponse(
+        request, "partials/_my_trades_section.html", {"request": request, **data},
+    )

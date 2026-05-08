@@ -34,7 +34,8 @@ fn open_settings(app: &AppHandle) {
     let _ = WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("settings.html".into()))
         .title("설정")
         .inner_size(360.0, 460.0)
-        .resizable(false)
+        .min_inner_size(300.0, 360.0)
+        .resizable(true)
         .always_on_top(true)
         .skip_taskbar(true)
         .build();
@@ -48,6 +49,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {

@@ -99,24 +99,57 @@
     line-height: 1.5;
   }
   .opt-group {
-    display: flex; flex-direction: column; gap: 4px;
+    display: flex; flex-direction: column; gap: 2px;
     border-top: 1px solid var(--line);
-    padding-top: 8px;
+    padding-top: 6px;
   }
   .opt-row {
-    display: flex; align-items: center; gap: 8px;
-    padding: 4px 0;
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 4px;
+    border-radius: 6px;
     cursor: pointer;
     user-select: none;
+    transition: background 0.1s;
   }
+  .opt-row:hover { background: rgba(255,255,255,0.04); }
+
+  /* 커스텀 체크박스 */
   .opt-row input[type=checkbox] {
-    accent-color: var(--accent);
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid rgba(255,255,255,0.18);
+    border-radius: 4px;
+    background: var(--card);
     cursor: pointer;
     margin: 0;
+    flex-shrink: 0;
+    position: relative;
+    transition: all 0.12s;
+  }
+  .opt-row input[type=checkbox]:hover {
+    border-color: rgba(255,255,255,0.30);
+  }
+  .opt-row input[type=checkbox]:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .opt-row input[type=checkbox]:checked::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
   }
   .opt-row span {
     font-size: 12px;
     color: var(--fg);
+    line-height: 1.3;
   }
 </style>
 </head>
@@ -134,12 +167,20 @@
     <label>비밀번호</label>
     <input id="pw" type="password" autocomplete="off" />
   </div>
+  <h2 style="margin-top:6px">위젯 표시 크기</h2>
+  <div class="opt-group" style="border-top:none; padding-top:4px; gap:6px">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <input type="range" id="opt-zoom" min="0.7" max="1.6" step="0.05" style="flex:1; accent-color: var(--accent);">
+      <span id="opt-zoom-val" style="font-size:11px; color:var(--dim); width:42px; text-align:right; font-variant-numeric:tabular-nums;">100%</span>
+    </div>
+  </div>
   <h2 style="margin-top:6px">자산 모드 표시</h2>
   <div class="opt-group">
     <label class="opt-row"><input type="checkbox" id="opt-hero"><span>총 평가/손익 (히어로)</span></label>
+    <label class="opt-row"><input type="checkbox" id="opt-total"><span>총 누적 기준 (청산분 원금 포함)</span></label>
+    <label class="opt-row"><input type="checkbox" id="opt-realized"><span>누적 실현손익 (히어로에 추가)</span></label>
     <label class="opt-row"><input type="checkbox" id="opt-holdings"><span>보유 종목</span></label>
-    <label class="opt-row"><input type="checkbox" id="opt-currency"><span>통화별 합계</span></label>
-    <label class="opt-row"><input type="checkbox" id="opt-account"><span>계좌별 합계</span></label>
+    <label class="opt-row"><input type="checkbox" id="opt-closed"><span>닫힌 포지션</span></label>
   </div>
   <div class="row">
     <button id="save" class="primary">저장</button>
@@ -151,6 +192,7 @@
 <script type="module">
 import { LazyStore } from "https://esm.sh/@tauri-apps/plugin-store@2";
 import { fetch as tFetch } from "https://esm.sh/@tauri-apps/plugin-http@2";
+import { emit } from "https://esm.sh/@tauri-apps/api@2/event";
 
 const store = new LazyStore("settings.json");
 const $ = (id) => document.getElementById(id);
@@ -165,10 +207,22 @@ async function loadBool(key, def) {
   $("user").value = (await store.get("user")) || "";
   $("pw").value = (await store.get("pw")) || "";
   $("opt-hero").checked = await loadBool("my_show_hero", true);
+  $("opt-total").checked = await loadBool("my_total_basis", false);
+  $("opt-realized").checked = await loadBool("my_show_realized", false);
   $("opt-holdings").checked = await loadBool("my_show_holdings", true);
-  $("opt-currency").checked = await loadBool("my_show_currency", false);
-  $("opt-account").checked = await loadBool("my_show_account", false);
+  $("opt-closed").checked = await loadBool("my_show_closed", false);
+
+  const z0 = Number(await store.get("widget_zoom")) || 1.0;
+  $("opt-zoom").value = z0;
+  $("opt-zoom-val").textContent = Math.round(z0 * 100) + "%";
 })();
+
+$("opt-zoom").addEventListener("input", async () => {
+  const v = Number($("opt-zoom").value);
+  $("opt-zoom-val").textContent = Math.round(v * 100) + "%";
+  // 위젯에 라이브 미리보기 — 저장 안 해도 즉시 반영
+  try { await emit("zoom-changed", v); } catch {}
+});
 
 function setMsg(text, kind = "") {
   const el = $("msg");
@@ -181,10 +235,14 @@ $("save").onclick = async () => {
   await store.set("user", $("user").value.trim());
   await store.set("pw", $("pw").value);
   await store.set("my_show_hero", $("opt-hero").checked);
+  await store.set("my_total_basis", $("opt-total").checked);
+  await store.set("my_show_realized", $("opt-realized").checked);
   await store.set("my_show_holdings", $("opt-holdings").checked);
-  await store.set("my_show_currency", $("opt-currency").checked);
-  await store.set("my_show_account", $("opt-account").checked);
+  await store.set("my_show_closed", $("opt-closed").checked);
+  await store.set("widget_zoom", Number($("opt-zoom").value) || 1.0);
   await store.save();
+  // 위젯에 즉시 적용 신호
+  try { await emit("settings-saved"); } catch {}
   setMsg("저장됨", "ok");
 };
 

@@ -23,6 +23,11 @@
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
     "global-shortcut:allow-is-registered",
+    "core:event:allow-listen",
+    "core:event:allow-emit",
+    "core:event:allow-unlisten",
+    "opener:default",
+    "opener:allow-open-url",
     {
       "identifier": "http:default",
       "allow": [

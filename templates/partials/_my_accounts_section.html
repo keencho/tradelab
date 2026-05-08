@@ -1,0 +1,196 @@
+<!-- ─────── 계좌별 카드 ─────── -->
+<div id="acc-list" class="space-y-4 mb-5">
+{% for acc in accounts %}
+<div class="acc-card bg-surface rounded-card overflow-hidden" data-account-id="{{ acc.id }}">
+    <!-- 카드 헤더 -->
+    <div class="flex items-center justify-between p-4 lg:p-5 border-b border-elevated/60">
+        <div class="flex items-center gap-3 min-w-0">
+            <button class="drag-handle text-muted hover:text-white transition-colors shrink-0" title="드래그로 순서 변경">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+            </button>
+            <span class="text-[11px] font-semibold px-2 py-1 rounded-lg shrink-0 chip-{{ acc.broker }}">
+                {{ broker_options.get(acc.broker, acc.broker) }}
+            </span>
+            <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-sm font-bold text-white truncate">{{ acc.nickname }}</span>
+                    <span class="text-[11px] text-muted shrink-0">{{ account_type_options.get(acc.account_type, acc.account_type) }} · {{ acc.currency }}</span>
+                </div>
+                <div class="flex items-center gap-x-2 gap-y-0.5 mt-1 text-xs flex-wrap">
+                    <span class="inline-flex items-center gap-1">
+                        <span class="text-muted">평가</span>
+                        <span data-money class="text-white font-semibold tabular-nums" data-acc-eval="{{ acc.id }}">—</span>
+                    </span>
+                    <span class="text-muted hidden sm:inline">·</span>
+                    <span class="inline-flex items-center gap-1">
+                        <span class="text-muted">손익</span>
+                        <span data-money class="font-semibold tabular-nums" data-acc-pnl="{{ acc.id }}">—</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-1 shrink-0">
+            <button data-acc-id="{{ acc.id }}" data-acc-nick="{{ acc.nickname }}" onclick="openAccEditModal(+this.dataset.accId, this.dataset.accNick)"
+                title="별명 수정" class="text-xs text-muted hover:text-toss px-2 py-1 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                </svg>
+            </button>
+            <button onclick="deleteAccount({{ acc.id }})"
+                title="삭제" class="text-xs text-muted hover:text-[#F04452] px-2 py-1 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    {% set hs = holdings_by_account.get(acc.id, []) %}
+    {% if hs %}
+    <!-- 데스크탑 테이블 -->
+    <table class="w-full hidden lg:table">
+        <thead>
+            <tr class="text-[11px] text-muted uppercase tracking-wider">
+                <th class="text-left px-5 py-2.5 font-medium">종목</th>
+                <th class="text-right px-3 py-2.5 font-medium">수량</th>
+                <th class="text-right px-3 py-2.5 font-medium">평단</th>
+                <th class="text-right px-3 py-2.5 font-medium">취득금액</th>
+                <th class="text-right px-3 py-2.5 font-medium">현재가</th>
+                <th class="text-right px-3 py-2.5 font-medium">평가금액</th>
+                <th class="text-right px-3 py-2.5 font-medium">평가손익</th>
+                <th class="text-right px-3 py-2.5 font-medium">실현손익</th>
+                <th class="px-3 py-2.5"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for h in hs %}
+            <tr class="holding-row border-t border-elevated/40 transition-colors{% if h.is_hidden %} is-hidden-row{% endif %}"
+                data-holding="{{ h.id }}" data-ticker="{{ h.ticker }}" data-market="{{ h.market }}">
+                <td class="px-5 py-3">
+                    <div class="flex items-center gap-2">
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-sm font-semibold text-white">{{ h.ticker_name or h.ticker }}</span>
+                            <span class="text-[11px] text-muted">{{ h.ticker }}</span>
+                        </div>
+                        <span class="hidden-chip{% if not h.is_hidden %} hidden{% endif %}">
+                            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+                            숨김
+                        </span>
+                    </div>
+                </td>
+                <td class="px-3 py-3 text-right text-sm text-muted tabular-nums">{{ "{:g}".format(h.qty) }}</td>
+                <td class="px-3 py-3 text-right text-sm text-muted tabular-nums hide-strike" data-money>{{ "{:,.2f}".format(h.avg_cost) }}</td>
+                <td class="px-3 py-3 text-right text-sm text-muted tabular-nums hide-strike" data-money>{{ "{:,.0f}".format(h.avg_cost * h.qty) }}</td>
+                <td class="px-3 py-3 text-right text-sm text-white tabular-nums hide-strike" data-money data-cur>—</td>
+                <td class="px-3 py-3 text-right text-sm text-white font-medium tabular-nums hide-strike" data-money data-eval>—</td>
+                <td class="px-3 py-3 text-right text-sm tabular-nums hide-strike" data-money data-pnl>—</td>
+                <td class="px-3 py-3 text-right text-sm tabular-nums {% if h.realized_pnl > 0 %}text-[#F04452]{% elif h.realized_pnl < 0 %}text-toss{% else %}text-muted{% endif %}" data-money>
+                    {% if h.realized_pnl != 0 %}{{ "{:+,.0f}".format(h.realized_pnl) }}{% else %}—{% endif %}
+                </td>
+                <td class="px-3 py-3 text-right">
+                    <button onclick="toggleHidden({{ h.id }}, this)"
+                        class="row-action-btn {% if h.is_hidden %}active{% endif %}"
+                        title="{% if h.is_hidden %}집계에 다시 포함{% else %}집계에서 숨기기{% endif %}">
+                        <svg class="icon-eye-off w-4 h-4{% if not h.is_hidden %} hidden{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+                        <svg class="icon-eye-on w-4 h-4{% if h.is_hidden %} hidden{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- 모바일 카드 -->
+    <div class="lg:hidden divide-y divide-elevated/40">
+        {% for h in hs %}
+        <div class="px-4 py-3 holding-row{% if h.is_hidden %} is-hidden-row{% endif %}"
+            data-holding="{{ h.id }}" data-ticker="{{ h.ticker }}" data-market="{{ h.market }}">
+            <div class="flex items-center justify-between mb-2">
+                <div class="min-w-0 flex items-center gap-2">
+                    <div class="min-w-0">
+                        <p class="text-sm font-semibold text-white truncate">{{ h.ticker_name or h.ticker }}</p>
+                        <p class="text-[11px] text-muted">{{ h.ticker }} · {{ "{:g}".format(h.qty) }}주</p>
+                    </div>
+                    <span class="hidden-chip{% if not h.is_hidden %} hidden{% endif %}">숨김</span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <span class="text-sm font-semibold tabular-nums hide-strike" data-money data-pnl>—</span>
+                    <button onclick="toggleHidden({{ h.id }}, this)"
+                        class="row-action-btn active text-muted">
+                        <svg class="icon-eye-off w-4 h-4{% if not h.is_hidden %} hidden{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+                        <svg class="icon-eye-on w-4 h-4{% if h.is_hidden %} hidden{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="grid grid-cols-4 gap-2 text-[11px]">
+                <div>
+                    <p class="text-muted">평단</p>
+                    <p class="text-white tabular-nums hide-strike" data-money>{{ "{:,.2f}".format(h.avg_cost) }}</p>
+                </div>
+                <div>
+                    <p class="text-muted">취득</p>
+                    <p class="text-white tabular-nums hide-strike" data-money>{{ "{:,.0f}".format(h.avg_cost * h.qty) }}</p>
+                </div>
+                <div>
+                    <p class="text-muted">현재가</p>
+                    <p class="text-white tabular-nums hide-strike" data-money data-cur>—</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-muted">평가</p>
+                    <p class="text-white tabular-nums hide-strike" data-money data-eval>—</p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-xs text-muted text-center py-6">보유 종목 없음</p>
+    {% endif %}
+
+    {% set closed = closed_by_account.get(acc.id, []) %}
+    {% if closed %}
+    <details class="border-t border-elevated/40">
+        <summary class="px-4 lg:px-5 py-3 cursor-pointer flex items-center justify-between text-xs text-muted hover:text-white transition-colors list-none">
+            <span class="flex items-center gap-2">
+                <svg class="w-3.5 h-3.5 transition-transform details-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+                닫힌 포지션 {{ closed|length }}개
+            </span>
+            {% set total_realized = closed | sum(attribute='realized_pnl') %}
+            <span class="tabular-nums {% if total_realized > 0 %}text-[#F04452]{% elif total_realized < 0 %}text-toss{% endif %}" data-money>
+                {{ "{:+,.0f}".format(total_realized) }}
+            </span>
+        </summary>
+        <div class="px-4 lg:px-5 pb-3">
+            <div class="space-y-1">
+                {% for h in closed %}
+                <div class="closed-row holding-row flex items-center justify-between py-2 px-2 rounded-lg hover:bg-elevated/40 transition-colors{% if h.is_hidden %} is-hidden-row{% endif %}"
+                    data-holding="{{ h.id }}">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-sm text-white truncate">{{ h.ticker_name or h.ticker }}</span>
+                        <span class="text-[11px] text-muted">{{ h.ticker }}</span>
+                        <span class="hidden-chip{% if not h.is_hidden %} hidden{% endif %}">숨김</span>
+                    </div>
+                    <div class="flex items-center gap-3 shrink-0">
+                        <span class="text-xs font-semibold tabular-nums hide-strike {% if h.realized_pnl > 0 %}text-[#F04452]{% elif h.realized_pnl < 0 %}text-toss{% else %}text-muted{% endif %}" data-money data-closed-realized="{{ h.realized_pnl }}">
+                            {{ "{:+,.0f}".format(h.realized_pnl) }}
+                        </span>
+                        <button onclick="toggleHidden({{ h.id }}, this)"
+                            class="row-action-btn {% if h.is_hidden %}active{% endif %} text-muted"
+                            title="{% if h.is_hidden %}집계에 다시 포함{% else %}집계에서 숨기기{% endif %}">
+                            <svg class="icon-eye-off w-4 h-4{% if not h.is_hidden %} hidden{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+                            <svg class="icon-eye-on w-4 h-4{% if h.is_hidden %} hidden{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </details>
+    {% endif %}
+</div>
+{% endfor %}
+</div>

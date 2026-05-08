@@ -1,0 +1,153 @@
+<!-- ─────── 거래 내역 ─────── -->
+<div class="bg-surface rounded-card overflow-hidden">
+    <div class="p-4 lg:p-5 border-b border-elevated/60">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div>
+                <h3 class="text-sm font-semibold text-white">거래 내역</h3>
+                <p class="text-[11px] text-muted mt-0.5">총 {{ trade_total }}건 · {{ trade_page }} / {{ trade_total_pages }} 페이지</p>
+            </div>
+            {% if trade_q or trade_side or trade_acc %}
+            <a href="/my" class="text-[11px] text-muted hover:text-white inline-flex items-center gap-1" data-trades-reset>
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                필터 초기화
+            </a>
+            {% endif %}
+        </div>
+        <form id="trades-search-form" method="get" action="/my" class="flex items-center gap-2 flex-wrap">
+            <div class="relative flex-1 min-w-[160px]">
+                <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <input type="text" name="q" value="{{ trade_q }}" placeholder="종목명/티커 검색" class="my-input pl-9">
+            </div>
+            <select name="acc" class="my-input flex-1 min-w-[140px] max-w-[200px]">
+                <option value="">전체 계좌</option>
+                {% for a in accounts %}
+                <option value="{{ a.id }}" {% if trade_acc == a.id %}selected{% endif %}>{{ a.nickname }}</option>
+                {% endfor %}
+            </select>
+            <select name="side" class="my-input flex-1 min-w-[100px] max-w-[140px]">
+                <option value="">전체 구분</option>
+                <option value="buy" {% if trade_side == 'buy' %}selected{% endif %}>매수</option>
+                <option value="sell" {% if trade_side == 'sell' %}selected{% endif %}>매도</option>
+                <option value="dividend" {% if trade_side == 'dividend' %}selected{% endif %}>배당</option>
+            </select>
+            <button type="submit" class="px-4 py-2.5 rounded-xl bg-toss text-white text-sm font-semibold">검색</button>
+        </form>
+    </div>
+
+    {% if trades %}
+    <!-- 데스크탑 -->
+    <table class="w-full hidden lg:table">
+        <thead>
+            <tr class="text-[11px] text-muted uppercase tracking-wider">
+                <th class="text-left px-5 py-2.5 font-medium">시간</th>
+                <th class="text-left px-3 py-2.5 font-medium">계좌</th>
+                <th class="text-left px-3 py-2.5 font-medium">종목</th>
+                <th class="text-left px-3 py-2.5 font-medium">구분</th>
+                <th class="text-right px-3 py-2.5 font-medium">수량</th>
+                <th class="text-right px-3 py-2.5 font-medium">단가</th>
+                <th class="text-right px-3 py-2.5 font-medium">수수료</th>
+                <th class="text-right px-3 py-2.5 font-medium">세금</th>
+                <th class="text-right px-3 py-2.5 font-medium">실현손익</th>
+                <th class="px-5 py-2.5"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in trades %}
+            <tr class="border-t border-elevated/40 hover:bg-elevated/30 transition-colors">
+                <td class="px-5 py-3 text-xs text-muted tabular-nums">{{ t.executed_at.strftime("%m/%d %H:%M") }}</td>
+                <td class="px-3 py-3 text-xs text-muted">{{ account_map.get(t.account_id, {}).get('nickname', '') }}</td>
+                <td class="px-3 py-3 text-sm text-white">
+                    <span class="font-medium">{{ t.ticker_name or t.ticker }}</span>
+                    <span class="text-[11px] text-muted ml-1">{{ t.ticker }}</span>
+                </td>
+                <td class="px-3 py-3">
+                    {% if t.side == 'buy' %}
+                    <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-[#F04452]/10 text-[#F04452]">매수</span>
+                    {% elif t.side == 'sell' %}
+                    <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-toss/10 text-toss">매도</span>
+                    {% else %}
+                    <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-elevated text-muted">배당</span>
+                    {% endif %}
+                </td>
+                <td class="px-3 py-3 text-right text-sm text-muted tabular-nums">{{ "{:g}".format(t.qty) }}</td>
+                <td class="px-3 py-3 text-right text-sm text-white tabular-nums" data-money>{{ "{:,.0f}".format(t.price) }}</td>
+                <td class="px-3 py-3 text-right text-xs text-muted tabular-nums" data-money>{{ "{:,.0f}".format(t.fee) }}</td>
+                <td class="px-3 py-3 text-right text-xs text-muted tabular-nums" data-money>{{ "{:,.0f}".format(t.tax) }}</td>
+                <td class="px-3 py-3 text-right text-xs tabular-nums {% if t.realized_pnl > 0 %}text-[#F04452]{% elif t.realized_pnl < 0 %}text-toss{% else %}text-muted{% endif %}" data-money>
+                    {% if t.realized_pnl != 0 %}{{ "{:+,.0f}".format(t.realized_pnl) }}{% else %}—{% endif %}
+                </td>
+                <td class="px-5 py-3 text-right">
+                    <div class="inline-flex items-center gap-1">
+                        <button onclick="editTrade({{ t.id }})" title="수정"
+                            class="text-xs text-muted hover:text-toss transition-colors p-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                            </svg>
+                        </button>
+                        <button onclick="deleteTrade({{ t.id }})" title="삭제"
+                            class="text-xs text-muted hover:text-[#F04452] transition-colors p-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- 모바일 -->
+    <div class="lg:hidden divide-y divide-elevated/40">
+        {% for t in trades %}
+        <div class="px-4 py-3 flex items-center gap-3">
+            <div class="shrink-0">
+                {% if t.side == 'buy' %}
+                <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-[#F04452]/10 text-[#F04452]">매수</span>
+                {% elif t.side == 'sell' %}
+                <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-toss/10 text-toss">매도</span>
+                {% else %}
+                <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-elevated text-muted">배당</span>
+                {% endif %}
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-white truncate">{{ t.ticker_name or t.ticker }}</p>
+                <p class="text-[11px] text-muted">{{ t.executed_at.strftime("%m/%d %H:%M") }} · {{ "{:g}".format(t.qty) }}주 · <span data-money>{{ "{:,.0f}".format(t.price) }}</span></p>
+            </div>
+            <div class="text-right shrink-0">
+                {% if t.realized_pnl != 0 %}
+                <p class="text-xs font-semibold tabular-nums {% if t.realized_pnl > 0 %}text-[#F04452]{% else %}text-toss{% endif %}" data-money>{{ "{:+,.0f}".format(t.realized_pnl) }}</p>
+                {% endif %}
+                <div class="flex items-center gap-2 justify-end mt-0.5">
+                    <button onclick="editTrade({{ t.id }})" class="text-[11px] text-toss">수정</button>
+                    <button onclick="deleteTrade({{ t.id }})" class="text-[11px] text-muted">삭제</button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-xs text-muted text-center py-8">거래 내역 없음</p>
+    {% endif %}
+
+    {% if trade_total_pages > 1 %}
+    <div class="flex items-center justify-center gap-2 p-4 border-t border-elevated/40">
+        {% set base_qs = "&q=" ~ trade_q ~ "&acc=" ~ (trade_acc or '') ~ "&side=" ~ trade_side %}
+        {% if trade_page > 1 %}
+        <a href="?page={{ trade_page - 1 }}{{ base_qs }}" class="px-3 py-1.5 rounded-lg text-xs bg-elevated text-muted hover:text-white inline-flex items-center gap-1" data-trades-page="{{ trade_page - 1 }}">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            이전
+        </a>
+        {% endif %}
+        <span class="text-xs text-muted px-2">{{ trade_page }} / {{ trade_total_pages }}</span>
+        {% if trade_page < trade_total_pages %}
+        <a href="?page={{ trade_page + 1 }}{{ base_qs }}" class="px-3 py-1.5 rounded-lg text-xs bg-elevated text-muted hover:text-white inline-flex items-center gap-1" data-trades-page="{{ trade_page + 1 }}">
+            다음
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>

@@ -1354,6 +1354,17 @@ async def my_refresh_prices(request: Request):
         holdings = [h for h in all_holdings if h.qty > 0]
         closed_holdings = [h for h in all_holdings if h.qty == 0]
 
+        # 누적 기준 계산용 — RealTrade 전부 (보유 + 청산 포함, hidden 종목은 집계 시 제외)
+        all_trades = (
+            session.query(RealTrade)
+            .filter(RealTrade.account_id.in_(accounts.keys()))
+            .all()
+        ) if accounts else []
+        # (account_id, market, ticker) → is_hidden
+        hidden_set = {
+            (h.account_id, h.market, h.ticker) for h in all_holdings if h.is_hidden
+        }
+
         watches = (
             session.query(RealQuickWatch)
             .filter(RealQuickWatch.owner == user)
@@ -1484,32 +1495,106 @@ async def my_refresh_prices(request: Request):
         agg["unrealized"] += unrealized
         agg["realized"] += h.realized_pnl
 
-    # 닫힌 포지션 (qty=0) 의 실현손익도 합산에 포함 (숨김 제외)
+    # 닫힌 포지션 (qty=0) 출력 + 실현손익 합산 (숨김 제외)
+    out_closed = []
     for h in closed_holdings:
-        if h.is_hidden:
-            continue
         acc = accounts.get(h.account_id)
-        if not acc:
+        ccy = acc.currency if acc else "KRW"
+        out_closed.append({
+            "id": h.id,
+            "account_id": h.account_id,
+            "ticker": h.ticker,
+            "ticker_name": h.ticker_name,
+            "market": h.market,
+            "currency": ccy,
+            "realized_pnl": h.realized_pnl,
+            "is_hidden": h.is_hidden,
+        })
+        if h.is_hidden or not acc:
             continue
-        ccy = acc.currency
         agg = by_account.setdefault(h.account_id, {
             "currency": ccy, "eval": 0.0, "cost": 0.0,
             "unrealized": 0.0, "realized": 0.0,
+            "cost_invested": 0.0, "sell_received": 0.0,
         })
         agg["realized"] += h.realized_pnl
+
+    # 누적 기준 — RealTrade 합산 (hidden 종목 제외)
+    # cost_invested = 매수 trade 누적 (참고용)
+    # sell_received = 매도 trade 누적 (참고용)
+    # peak_invested = 통화별 시간순 cumulative net invested (buy-sell) 의 최댓값
+    #   = "내가 실제로 가장 많이 깔아둔 자본" (재투자/인출 모두 자연스럽게 처리)
+    # 기존 by_account 항목들에 새 키 없을 수 있어 보장
+    for agg in by_account.values():
+        agg.setdefault("cost_invested", 0.0)
+        agg.setdefault("sell_received", 0.0)
+
+    # 통화별 cumulative net invested 와 peak 계산 (시간순)
+    peak_per_ccy: dict[str, float] = {}
+    running_per_ccy: dict[str, float] = {}
+    trades_sorted = sorted(
+        all_trades,
+        key=lambda t: (t.executed_at or datetime.min, t.id)
+    )
+    for t in trades_sorted:
+        if (t.account_id, t.market, t.ticker) in hidden_set:
+            continue
+        acc = accounts.get(t.account_id)
+        if not acc:
+            continue
+        ccy = acc.currency
+
+        agg = by_account.setdefault(t.account_id, {
+            "currency": ccy, "eval": 0.0, "cost": 0.0,
+            "unrealized": 0.0, "realized": 0.0,
+            "cost_invested": 0.0, "sell_received": 0.0,
+        })
+
+        if t.side == "buy":
+            amt = t.qty * t.price + (t.fee or 0.0)
+            agg["cost_invested"] += amt
+            running_per_ccy[ccy] = running_per_ccy.get(ccy, 0.0) + amt
+        elif t.side == "sell":
+            amt = t.qty * t.price - (t.fee or 0.0) - (t.tax or 0.0)
+            agg["sell_received"] += amt
+            running_per_ccy[ccy] = running_per_ccy.get(ccy, 0.0) - amt
+
+        cur = running_per_ccy.get(ccy, 0.0)
+        if cur > peak_per_ccy.get(ccy, 0.0):
+            peak_per_ccy[ccy] = cur
 
     # 통화별 합산
     by_currency: dict[str, dict] = {}
     for acc_id, agg in by_account.items():
+        agg.setdefault("cost_invested", 0.0)
+        agg.setdefault("sell_received", 0.0)
         ccy = agg["currency"]
-        c = by_currency.setdefault(ccy, {"eval": 0.0, "cost": 0.0, "unrealized": 0.0, "realized": 0.0})
+        c = by_currency.setdefault(ccy, {
+            "eval": 0.0, "cost": 0.0, "unrealized": 0.0, "realized": 0.0,
+            "cost_invested": 0.0, "sell_received": 0.0,
+            "peak_invested": 0.0,
+        })
         c["eval"] += agg["eval"]
         c["cost"] += agg["cost"]
         c["unrealized"] += agg["unrealized"]
         c["realized"] += agg["realized"]
+        c["cost_invested"] += agg["cost_invested"]
+        c["sell_received"] += agg["sell_received"]
+
+    # peak_invested 는 통화별 직접 set (account 합산 X)
+    for ccy, peak in peak_per_ccy.items():
+        c = by_currency.setdefault(ccy, {
+            "eval": 0.0, "cost": 0.0, "unrealized": 0.0, "realized": 0.0,
+            "cost_invested": 0.0, "sell_received": 0.0,
+            "peak_invested": 0.0,
+        })
+        c["peak_invested"] = peak
+    for c in by_currency.values():
+        c.setdefault("peak_invested", 0.0)
 
     return {
         "holdings": out_holdings,
+        "closed_holdings": out_closed,
         "by_account": by_account,
         "by_currency": by_currency,
         "watches": watch_out,

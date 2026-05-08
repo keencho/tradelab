@@ -173,9 +173,9 @@
                 <p id="hero-cost" class="text-base lg:text-2xl font-bold text-white mt-1 tabular-nums whitespace-nowrap" data-money>—</p>
             </div>
             <div class="min-w-0">
-                <p class="text-[10px] lg:text-[11px] text-muted uppercase tracking-wider">평가손익 <span class="text-muted/70">(미실현)</span></p>
-                <p id="hero-pnl" class="text-base lg:text-2xl font-bold tabular-nums mt-1 whitespace-nowrap" data-money>—</p>
-                <p id="hero-pnl-pct" class="text-[11px] tabular-nums">—</p>
+                <p class="text-[10px] lg:text-[11px] text-muted uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis"><span id="hero-pnl-title">평가손익</span> <span class="text-muted/70" id="hero-pnl-sub">(미실현)</span></p>
+                <p id="hero-pnl" class="text-base lg:text-2xl font-bold tabular-nums mt-1 whitespace-nowrap overflow-hidden text-ellipsis" data-money>—</p>
+                <p id="hero-pnl-pct" class="text-[11px] tabular-nums whitespace-nowrap">—</p>
             </div>
             <div class="min-w-0">
                 <p class="text-[10px] lg:text-[11px] text-muted uppercase tracking-wider">누적 실현 <span class="text-muted/70">(KRW)</span></p>
@@ -206,6 +206,17 @@
                 <p id="hero-fetched" class="text-xs text-white font-medium mt-0.5">—</p>
             </div>
         </div>
+    </div>
+    <!-- 기준 토글 — 보유분 vs 총 누적 -->
+    <div class="flex items-center justify-end gap-2 mb-2 -mt-2">
+        <span class="text-[11px] text-muted">기준</span>
+        <div class="inline-flex items-center bg-elevated/40 rounded-full p-0.5 text-[11px] font-medium" role="tablist">
+            <button id="basis-hold" type="button" onclick="setBasis('hold')" class="px-3 py-1 rounded-full transition-colors">보유분</button>
+            <button id="basis-total" type="button" onclick="setBasis('total')" class="px-3 py-1 rounded-full transition-colors">총 누적</button>
+        </div>
+        <button type="button" onclick="alert('보유분: 현재 보유 종목의 매수원가/평가/평가손익만 표시.\n총 누적: 청산된 포지션의 매수원가도 포함, 미실현+실현 합산 손익으로 표시.')" class="text-muted hover:text-white text-[11px]" title="기준 설명">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </button>
     </div>
     <div id="summary-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
 </div>
@@ -259,8 +270,12 @@
 </div>
 {% else %}
 
-<!-- ─────── 계좌별 카드 ─────── -->
-<div id="acc-list" class="space-y-4 mb-5">
+<div id="accounts-area">
+{% include 'partials/_my_accounts_section.html' %}
+</div>
+
+{# OLD INLINE START — replaced by partial above
+<div id="acc-list-OLD" class="space-y-4 mb-5">
 {% for acc in accounts %}
 <div class="acc-card bg-surface rounded-card overflow-hidden" data-account-id="{{ acc.id }}">
     <!-- 카드 헤더 -->
@@ -455,8 +470,13 @@
 </div>
 {% endfor %}
 </div>
+#}
 
-<!-- ─────── 거래 내역 ─────── -->
+<div id="trades-area">
+{% include 'partials/_my_trades_section.html' %}
+</div>
+
+{# OLD TRADES SECTION START — replaced by partial above
 <div class="bg-surface rounded-card overflow-hidden">
     <div class="p-4 lg:p-5 border-b border-elevated/60">
         <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -609,6 +629,7 @@
     </div>
     {% endif %}
 </div>
+#}
 
 {% endif %}
 
@@ -1115,9 +1136,19 @@ function applyRefresh(data) {
         var hasUnsetFx = false;
         currencies.forEach(function(c) {
             if (c !== 'KRW' && !getFx().usd) hasUnsetFx = true;
-            totalKrw += fxToKrw(data.by_currency[c].eval, c);
-            totalCostKrw += fxToKrw(data.by_currency[c].cost, c);
-            totalRealizedKrw += fxToKrw(data.by_currency[c].realized, c);
+            var cc = data.by_currency[c];
+            if (totalBasis) {
+                // peak_invested = 시점별 net invested 의 최댓값 (실제 깔아둔 자본)
+                var peak = cc.peak_invested || 0;
+                var unr = cc.unrealized || 0;
+                var rl = cc.realized || 0;
+                totalCostKrw += fxToKrw(peak, c);
+                totalKrw     += fxToKrw(peak + unr + rl, c);
+            } else {
+                totalKrw     += fxToKrw(cc.eval || 0, c);
+                totalCostKrw += fxToKrw(cc.cost || 0, c);
+            }
+            totalRealizedKrw += fxToKrw(cc.realized || 0, c);
         });
         var pnlKrw = totalKrw - totalCostKrw;
         var pnlPct = totalCostKrw > 0 ? (pnlKrw / totalCostKrw * 100) : 0;
@@ -1185,6 +1216,31 @@ function applyRefresh(data) {
     if (masked) applyMask();
 }
 
+var _lastRefreshData = null;
+var totalBasis = (localStorage.getItem('my_total_basis') === 'true');
+
+function setBasis(mode) {
+    totalBasis = (mode === 'total');
+    localStorage.setItem('my_total_basis', totalBasis ? 'true' : 'false');
+    updateBasisUI();
+    if (_lastRefreshData) applyRefresh(_lastRefreshData);
+}
+
+function updateBasisUI() {
+    var hold = document.getElementById('basis-hold');
+    var tot  = document.getElementById('basis-total');
+    if (!hold || !tot) return;
+    var on  = 'px-3 py-1 rounded-full transition-colors bg-toss text-white';
+    var off = 'px-3 py-1 rounded-full transition-colors text-muted hover:text-white';
+    hold.className = totalBasis ? off : on;
+    tot.className  = totalBasis ? on : off;
+
+    var sub = document.getElementById('hero-pnl-sub');
+    var title = document.getElementById('hero-pnl-title');
+    if (sub) sub.textContent = totalBasis ? '(누적)' : '(미실현)';
+    if (title) title.textContent = totalBasis ? '누적 손익' : '평가손익';
+}
+
 function refreshNow() {
     if (refreshing) return Promise.resolve();
     refreshing = true;
@@ -1194,6 +1250,7 @@ function refreshNow() {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!data) return;
+            _lastRefreshData = data;
             if (data.holdings) applyRefresh(data);
             if (data.watches) renderWatchList(data.watches);
         })
@@ -1203,6 +1260,93 @@ function refreshNow() {
             setTimeout(function() { icon.classList.remove('spin'); }, 300);
         });
 }
+
+// ───────── partial 영역 ajax 갱신 ─────────
+function _currentTradeQuery() {
+    var u = new URL(window.location.href);
+    var p = new URLSearchParams();
+    ['q', 'acc', 'side', 'page'].forEach(function(k) {
+        var v = u.searchParams.get(k);
+        if (v) p.set(k, v);
+    });
+    return p;
+}
+
+function refreshAccountsArea() {
+    return fetch('/api/my/_partial/accounts')
+        .then(function(r) { return r.ok ? r.text() : null; })
+        .then(function(html) {
+            if (html != null) {
+                document.getElementById('accounts-area').innerHTML = html;
+            }
+        })
+        .catch(function(e) { console.error(e); });
+}
+
+function refreshTradesArea(params) {
+    var qs = '';
+    if (params) {
+        var s = (typeof params === 'string') ? params : params.toString();
+        if (s) qs = '?' + s;
+    }
+    return fetch('/api/my/_partial/trades' + qs)
+        .then(function(r) { return r.ok ? r.text() : null; })
+        .then(function(html) {
+            if (html != null) {
+                document.getElementById('trades-area').innerHTML = html;
+            }
+        })
+        .catch(function(e) { console.error(e); });
+}
+
+// 거래/계좌 변경 후 일괄 갱신
+function refreshAfterMutation() {
+    return Promise.all([
+        refreshAccountsArea(),
+        refreshTradesArea(_currentTradeQuery()),
+        refreshNow(),
+    ]);
+}
+
+// 검색 form intercept (이벤트 위임 — partial reload 후에도 작동)
+document.addEventListener('submit', function(e) {
+    if (e.target && e.target.id === 'trades-search-form') {
+        e.preventDefault();
+        var fd = new FormData(e.target);
+        var p = new URLSearchParams();
+        fd.forEach(function(v, k) { if (v) p.set(k, v); });
+        var qs = p.toString();
+        refreshTradesArea(p);
+        history.pushState({trades: qs}, '', '/my' + (qs ? '?' + qs : ''));
+    }
+});
+
+// 페이지네이션 / 필터 초기화 click intercept
+document.addEventListener('click', function(e) {
+    var pageLink = e.target.closest && e.target.closest('a[data-trades-page]');
+    if (pageLink) {
+        e.preventDefault();
+        var page = pageLink.getAttribute('data-trades-page');
+        var u = new URL(window.location.href);
+        u.searchParams.set('page', page);
+        var p = u.searchParams;
+        refreshTradesArea(p);
+        history.pushState({trades: p.toString()}, '', '/my?' + p.toString());
+        return;
+    }
+    var resetLink = e.target.closest && e.target.closest('a[data-trades-reset]');
+    if (resetLink) {
+        e.preventDefault();
+        refreshTradesArea(null);
+        history.pushState({trades: ''}, '', '/my');
+        return;
+    }
+});
+
+// 뒤로/앞으로 — URL 따라 trades 영역만 다시
+window.addEventListener('popstate', function() {
+    refreshTradesArea(_currentTradeQuery());
+});
 
 var liveOn = false;
 
@@ -1549,7 +1693,8 @@ function submitTrade() {
     }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
     .then(function(res) {
         if (res.ok) {
-            location.reload();
+            closeTradeModal();
+            refreshAfterMutation();
         } else {
             err.textContent = res.data.error || '실패';
             err.classList.remove('hidden');
@@ -1565,7 +1710,7 @@ function submitTrade() {
 function deleteTrade(id) {
     if (!confirm('이 거래를 삭제하시겠습니까? (해당 종목 평단/실현손익 재계산됩니다)')) return;
     fetch('/api/my/trades/' + id, { method: 'DELETE' })
-        .then(function(r) { if (r.ok) location.reload(); });
+        .then(function(r) { if (r.ok) refreshAfterMutation(); });
 }
 
 // ───────── 계좌 모달 ─────────
@@ -1592,14 +1737,19 @@ function submitAccount() {
         body: JSON.stringify(body),
     }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
     .then(function(res) {
-        if (res.ok) location.reload();
-        else { err.textContent = res.data.error || '실패'; err.classList.remove('hidden'); }
+        if (res.ok) {
+            closeAccountModal();
+            refreshAfterMutation();
+        } else {
+            err.textContent = res.data.error || '실패';
+            err.classList.remove('hidden');
+        }
     });
 }
 function deleteAccount(id) {
     if (!confirm('계좌 + 보유종목 + 거래내역이 모두 삭제됩니다. 진행하시겠습니까?')) return;
     fetch('/api/my/accounts/' + id, { method: 'DELETE' })
-        .then(function(r) { if (r.ok) location.reload(); });
+        .then(function(r) { if (r.ok) refreshAfterMutation(); });
 }
 
 function toggleHidden(id, btn) {
@@ -1657,8 +1807,13 @@ function saveAccEdit() {
         body: JSON.stringify({ nickname: nickname }),
     }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
     .then(function(res) {
-        if (res.ok) location.reload();
-        else { err.textContent = res.data.error || '실패'; err.classList.remove('hidden'); }
+        if (res.ok) {
+            closeAccEditModal();
+            refreshAfterMutation();
+        } else {
+            err.textContent = res.data.error || '실패';
+            err.classList.remove('hidden');
+        }
     });
 }
 
@@ -2001,6 +2156,7 @@ renderMonthlyRealized();
 })();
 
 // 페이지 진입 시 자동 1회 갱신
+updateBasisUI();
 refreshNow();
 
 // ───────── 계좌 DnD ─────────
