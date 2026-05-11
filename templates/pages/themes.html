@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Themes{% endblock %}
+
+{% block content %}
+<div class="flex items-end justify-between mb-5">
+    <div>
+        <h1 class="text-2xl font-bold text-white">오늘의 핫 업종</h1>
+        <p class="text-sm text-muted mt-1">한국 증시 업종별 전일대비 등락. Naver 시세 기반. 약 10분마다 갱신.</p>
+    </div>
+</div>
+
+<!-- 정렬 탭 -->
+<div class="flex gap-2 mb-4">
+    <a href="/themes?sort=change"
+       class="px-4 py-2 text-sm rounded-xl font-medium transition-colors
+              {% if sort == 'change' %}bg-toss/10 text-toss{% else %}text-muted hover:text-white active:bg-elevated{% endif %}">등락률</a>
+    <a href="/themes?sort=volume"
+       class="px-4 py-2 text-sm rounded-xl font-medium transition-colors
+              {% if sort == 'volume' %}bg-toss/10 text-toss{% else %}text-muted hover:text-white active:bg-elevated{% endif %}">종목수</a>
+    <a href="/themes?sort=name"
+       class="px-4 py-2 text-sm rounded-xl font-medium transition-colors
+              {% if sort == 'name' %}bg-toss/10 text-toss{% else %}text-muted hover:text-white active:bg-elevated{% endif %}">이름</a>
+</div>
+
+{% if not sectors %}
+<div class="bg-surface rounded-card p-6 text-center text-muted">
+    업종 데이터를 불러올 수 없습니다. 잠시 후 다시 시도하세요.
+</div>
+{% else %}
+
+<!-- 상위 5 하이라이트 (큰 카드) -->
+{% if sort == 'change' and sectors|length >= 6 %}
+{% set top5 = sectors[:5] %}
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+    {% for s in top5 %}
+    <a href="/themes/{{ s.no }}"
+       class="block rounded-card p-4 transition-colors
+              {% if s.change_pct > 0 %}bg-[#F04452]/10 hover:bg-[#F04452]/20
+              {% elif s.change_pct < 0 %}bg-toss/10 hover:bg-toss/20
+              {% else %}bg-surface hover:bg-elevated{% endif %}">
+        <p class="text-[11px] text-muted uppercase tracking-wider">#{{ loop.index }}</p>
+        <p class="text-sm font-bold text-white mt-1 truncate">{{ s.name }}</p>
+        <p class="text-xl font-bold tabular-nums mt-2
+                  {% if s.change_pct > 0 %}text-[#F04452]
+                  {% elif s.change_pct < 0 %}text-toss
+                  {% else %}text-muted{% endif %}">
+            {{ '%+.2f'|format(s.change_pct) }}%
+        </p>
+        <p class="text-[11px] text-muted mt-1 tabular-nums">{{ s.up }} ↑ · {{ s.down }} ↓</p>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- 전체 리스트 (한 줄에 하나, 빈 공간은 분포 bar 로 시각화) -->
+<div class="bg-surface rounded-card overflow-hidden divide-y divide-elevated/40">
+    {% for s in sectors %}
+    {% set tot = s.up + s.flat + s.down %}
+    {% set up_w = (s.up / tot * 100) if tot > 0 else 0 %}
+    {% set flat_w = (s.flat / tot * 100) if tot > 0 else 0 %}
+    {% set down_w = (s.down / tot * 100) if tot > 0 else 0 %}
+    <a href="/themes/{{ s.no }}"
+       class="flex items-center gap-3 sm:gap-4 px-4 py-3 hover:bg-elevated/30 transition-colors">
+
+        <!-- 1. 업종명 + 종목수 -->
+        <div class="shrink-0 sm:w-[180px] min-w-0">
+            <p class="text-sm text-white font-semibold truncate">{{ s.name }}</p>
+            <p class="text-[11px] text-muted tabular-nums mt-0.5">{{ s.total }}종목</p>
+        </div>
+
+        <!-- 2. 분포 bar (PC 만, 빈 공간 채움) — 상승↑ / 보합 / 하락↓ -->
+        <div class="hidden sm:flex flex-1 items-center gap-2.5 min-w-0">
+            <span class="text-xs text-[#F04452] tabular-nums w-9 text-right shrink-0 font-semibold">{{ s.up }}</span>
+            <div class="flex-1 h-2 rounded-full overflow-hidden bg-elevated flex">
+                <div class="h-full bg-[#F04452]" style="width: {{ '%.1f'|format(up_w) }}%"></div>
+                <div class="h-full bg-muted/40" style="width: {{ '%.1f'|format(flat_w) }}%"></div>
+                <div class="h-full bg-toss" style="width: {{ '%.1f'|format(down_w) }}%"></div>
+            </div>
+            <span class="text-xs text-toss tabular-nums w-9 shrink-0 font-semibold">{{ s.down }}</span>
+        </div>
+
+        <!-- 모바일 카운트 -->
+        <div class="sm:hidden flex-1 min-w-0 text-right">
+            <p class="text-[11px] tabular-nums">
+                <span class="text-[#F04452]">{{ s.up }}↑</span>
+                <span class="text-muted mx-1">·</span>
+                <span class="text-toss">{{ s.down }}↓</span>
+            </p>
+        </div>
+
+        <!-- 3. 등락률 chip (우측) -->
+        <div class="shrink-0 w-[72px] text-center py-1.5 rounded-lg tabular-nums font-bold text-sm
+                    {% if s.change_pct > 0 %}bg-[#F04452]/12 text-[#F04452]
+                    {% elif s.change_pct < 0 %}bg-toss/12 text-toss
+                    {% else %}bg-elevated text-muted{% endif %}">
+            {{ '%+.2f'|format(s.change_pct) }}%
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

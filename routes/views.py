@@ -25,6 +25,21 @@ templates.env.filters["z_label"] = lambda z: (
     if z else ""
 )
 
+# signal_type → /learn 글 slug 매핑 (있는 것만)
+_SIGNAL_TYPE_LEARN_SLUG = {
+    "foreign_net_buy": "foreign-net-buy",
+    "institutional_net_buy": "foreign-net-buy",
+    "short_ratio": "short-selling",
+    "funding_rate": "funding-rate",
+    "open_interest": "open-interest",
+    "us_cpi": "cpi",
+    "kr_cpi": "cpi",
+    "us_yield_spread": "yield-spread",
+    "us_vix": "vix",
+}
+templates.env.filters["signal_type_slug"] = lambda v: _SIGNAL_TYPE_LEARN_SLUG.get(v, "")
+templates.env.globals["LEARN_SLUGS"] = _SIGNAL_TYPE_LEARN_SLUG
+
 
 # ── 인증 체크 공통 ────────────────────────────────────────────
 
@@ -159,6 +174,78 @@ async def settings(request: Request):
     return _page_response(request, "pages/settings.html", {
         "request": request,
         "page": "settings",
+    })
+
+
+@router.get("/themes", response_class=HTMLResponse)
+async def themes_index(request: Request):
+    from services.themes import fetch_sectors
+    sort = request.query_params.get("sort", "change")  # change | volume | name
+    sectors = list(fetch_sectors())
+    if sort == "volume":
+        sectors.sort(key=lambda s: s.total, reverse=True)
+    elif sort == "name":
+        sectors.sort(key=lambda s: s.name)
+    else:  # change — 절대값 큰 순
+        sectors.sort(key=lambda s: abs(s.change_pct), reverse=True)
+    return _page_response(request, "pages/themes.html", {
+        "request": request,
+        "page": "themes",
+        "sectors": sectors,
+        "sort": sort,
+    })
+
+
+@router.get("/themes/{no}", response_class=HTMLResponse)
+async def themes_detail(request: Request, no: str):
+    from fastapi.responses import RedirectResponse
+    from services.themes import fetch_sector_stocks, get_sector_by_no
+    sector = get_sector_by_no(no)
+    if not sector:
+        return RedirectResponse(url="/themes")
+    sort = request.query_params.get("sort", "value")  # 기본: 거래대금
+    stocks = list(fetch_sector_stocks(no))
+    if sort == "volume":
+        stocks.sort(key=lambda s: s.volume, reverse=True)
+    elif sort == "change":
+        stocks.sort(key=lambda s: s.change_pct, reverse=True)
+    elif sort == "price":
+        stocks.sort(key=lambda s: s.price, reverse=True)
+    else:  # value (기본)
+        stocks.sort(key=lambda s: s.value, reverse=True)
+    return _page_response(request, "pages/themes_detail.html", {
+        "request": request,
+        "page": "themes",
+        "sector": sector,
+        "stocks": stocks,
+        "sort": sort,
+    })
+
+
+@router.get("/learn", response_class=HTMLResponse)
+async def learn_index(request: Request):
+    from services.learn import list_by_category, CATEGORY_LABELS
+    return _page_response(request, "pages/learn.html", {
+        "request": request,
+        "page": "learn",
+        "grouped": list_by_category(),
+        "category_labels": CATEGORY_LABELS,
+    })
+
+
+@router.get("/learn/{slug}", response_class=HTMLResponse)
+async def learn_article(request: Request, slug: str):
+    from fastapi.responses import RedirectResponse
+    from services.learn import get_article, CATEGORY_LABELS, list_by_category
+    art = get_article(slug)
+    if not art:
+        return RedirectResponse(url="/learn")
+    return _page_response(request, "pages/learn_article.html", {
+        "request": request,
+        "page": "learn",
+        "article": art,
+        "category_label": CATEGORY_LABELS.get(art.category, art.category),
+        "grouped": list_by_category(),
     })
 
 

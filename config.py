@@ -138,6 +138,10 @@ BROKER_FEES: dict[tuple[str, str], dict[str, float]] = {
     ("kis",     "regular_oversea"): {"buy": 0.07,  "sell": 0.07,  "tax_sell": 0.00229},
     ("kis",     "isa"):             {"buy": 0.015, "sell": 0.015, "tax_sell": 0.20},
     ("kis",     "pension"):         {"buy": 0.015, "sell": 0.015, "tax_sell": 0.20},
+    # 회사 DC형 퇴직연금 — 운용 수수료/거래세 사실상 0 (펀드 운용보수는 별도, 추적 X)
+    ("nh",      "dc"):              {"buy": 0.0,   "sell": 0.0,   "tax_sell": 0.0},
+    ("samsung", "dc"):              {"buy": 0.0,   "sell": 0.0,   "tax_sell": 0.0},
+    ("kis",     "dc"):              {"buy": 0.0,   "sell": 0.0,   "tax_sell": 0.0},
     ("upbit",   "crypto"):          {"buy": 0.05,  "sell": 0.05,  "tax_sell": 0.0},
     ("bithumb", "crypto"):          {"buy": 0.04,  "sell": 0.04,  "tax_sell": 0.0},
     ("binance", "crypto"):          {"buy": 0.1,   "sell": 0.1,   "tax_sell": 0.0},
@@ -148,6 +152,7 @@ BROKER_NAMES = {
     "toss": "토스증권",
     "samsung": "삼성증권",
     "kis": "한국투자증권",
+    "nh": "농협은행",
     "upbit": "업비트",
     "bithumb": "빗썸",
     "binance": "바이낸스",
@@ -160,6 +165,7 @@ ACCOUNT_TYPE_NAMES = {
     "isa": "ISA",
     "pension": "연금저축",
     "irp": "IRP",
+    "dc": "DC형 퇴직연금",
     "crypto": "코인",
 }
 
@@ -169,6 +175,7 @@ ACCOUNT_TYPE_MARKET = {
     "isa": "kr_stock",
     "pension": "kr_stock",
     "irp": "kr_stock",
+    "dc": "kr_stock",
     "crypto": "crypto",
 }
 

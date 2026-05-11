@@ -68,6 +68,7 @@
     .chip-toss     { background: rgba(0, 110, 240, .12); color: #4D9FFF; }
     .chip-samsung  { background: rgba(20, 70, 160, .15); color: #7AB1FF; }
     .chip-kis      { background: rgba(255, 159, 0, .12); color: #FFB852; }
+    .chip-nh       { background: rgba(20, 130, 60, .14); color: #5EC97A; }   /* 농협 그린 */
     .chip-upbit    { background: rgba(0, 132, 255, .14); color: #4DA9FF; }
     .chip-bithumb  { background: rgba(245, 90, 30, .12); color: #FF9061; }
     .chip-binance  { background: rgba(240, 185, 11, .14); color: #F0B90B; }
@@ -710,6 +711,13 @@
 
                 <div>
                     <label class="text-[11px] text-muted block mb-1.5 uppercase tracking-wider">종목</label>
+
+                    <!-- 매도/배당 시 보유 종목 픽커 (계좌에 보유분 있을 때만 노출) -->
+                    <div id="t-holdings-picker" class="hidden mb-2">
+                        <p class="text-[10px] text-muted mb-1.5">계좌 보유 종목에서 선택</p>
+                        <div id="t-holdings-list" class="flex flex-wrap gap-1.5"></div>
+                    </div>
+
                     <div class="relative">
                         <input type="text" id="t-search" autocomplete="off" placeholder="종목명 또는 코드 검색"
                             class="my-input pl-9">
@@ -1301,6 +1309,8 @@ function refreshTradesArea(params) {
 
 // 거래/계좌 변경 후 일괄 갱신
 function refreshAfterMutation() {
+    // 보유 종목 캐시 무효화 — 거래 후 잔고가 달라지므로
+    _holdingsCache = {};
     return Promise.all([
         refreshAccountsArea(),
         refreshTradesArea(_currentTradeQuery()),
@@ -1540,11 +1550,93 @@ function setSide(side) {
     else if (side === 'sell') { submit.classList.add('bg-toss'); submit.textContent = isEdit ? '저장하기' : '매도하기'; }
     else { submit.classList.add('bg-elevated'); submit.textContent = isEdit ? '저장하기' : '배당 추가'; }
 
+    // 매도/배당이면 보유 종목 픽커 로드
+    refreshHoldingsPicker();
     updateFeePreview();
 }
 
 document.querySelectorAll('#t-side-seg [data-side]').forEach(function(b) {
     b.addEventListener('click', function() { setSide(b.dataset.side); });
+});
+
+// ── 보유 종목 픽커 (매도/배당시) ───────────────────────────
+var _holdingsCache = {};  // account_id -> [holdings]
+var _holdingsLoading = {};
+
+async function refreshHoldingsPicker() {
+    var picker = document.getElementById('t-holdings-picker');
+    var listEl = document.getElementById('t-holdings-list');
+    // 매도/배당이 아니면 숨김
+    if (tCurrentSide !== 'sell' && tCurrentSide !== 'dividend') {
+        picker.classList.add('hidden');
+        return;
+    }
+    var accSel = document.getElementById('t-account');
+    var accId = accSel.value ? parseInt(accSel.value) : 0;
+    if (!accId) {
+        picker.classList.add('hidden');
+        return;
+    }
+
+    // 캐시 + 로딩 가드
+    if (_holdingsLoading[accId]) return;
+    var cached = _holdingsCache[accId];
+    if (cached) {
+        renderHoldingsPicker(cached);
+        return;
+    }
+    _holdingsLoading[accId] = true;
+    listEl.innerHTML = '<span class="text-[10px] text-muted">로딩 중...</span>';
+    picker.classList.remove('hidden');
+
+    try {
+        var r = await fetch('/api/my/accounts/' + accId + '/holdings');
+        if (!r.ok) {
+            picker.classList.add('hidden');
+            return;
+        }
+        var data = await r.json();
+        _holdingsCache[accId] = data;
+        renderHoldingsPicker(data);
+    } catch (e) {
+        picker.classList.add('hidden');
+    } finally {
+        _holdingsLoading[accId] = false;
+    }
+}
+
+function renderHoldingsPicker(holdings) {
+    var picker = document.getElementById('t-holdings-picker');
+    var listEl = document.getElementById('t-holdings-list');
+    if (!holdings || holdings.length === 0) {
+        picker.classList.add('hidden');
+        return;
+    }
+    picker.classList.remove('hidden');
+    listEl.innerHTML = holdings.map(function(h) {
+        var name = h.ticker_name || h.ticker;
+        return '<button type="button" data-tk="' + h.ticker + '" data-name="' + name.replace(/"/g, '&quot;') + '" data-market="' + h.market + '" data-qty="' + h.qty + '" ' +
+            'class="hldp-chip px-2.5 py-1 rounded-lg text-[11px] bg-elevated hover:bg-toss/15 hover:text-toss text-white transition-colors">' +
+            name + '</button>';
+    }).join('');
+    listEl.querySelectorAll('.hldp-chip').forEach(function(b) {
+        b.onclick = function() {
+            selectTicker(b.dataset.tk, b.dataset.name, b.dataset.market);
+            // 매도 시 수량 자동 입력 (전량 매도 편의)
+            if (tCurrentSide === 'sell') {
+                var qtyEl = document.getElementById('t-qty');
+                if (!qtyEl.value || parseFloat(qtyEl.value) === 0) {
+                    qtyEl.value = b.dataset.qty;
+                    updateFeePreview();
+                }
+            }
+        };
+    });
+}
+
+// 계좌 변경 시 픽커 갱신
+document.getElementById('t-account').addEventListener('change', function() {
+    refreshHoldingsPicker();
 });
 
 function _accountTypeToMarket(type) {

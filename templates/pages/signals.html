@@ -107,7 +107,18 @@
                 <div class="flex items-center gap-2 mb-1 flex-wrap">
                     <span class="font-bold text-white">{{ s.ticker_name or s.ticker }}</span>
                     {% if s.ticker_name %}<span class="text-xs text-muted">{{ s.ticker }}</span>{% endif %}
+                    {% set _slug = s.signal_type|signal_type_slug %}
+                    {% if _slug %}
+                    <a href="/learn/{{ _slug }}" title="{{ s.signal_type|signal_type_kr }} 설명 보기"
+                       class="text-xs px-2 py-0.5 rounded-lg bg-elevated text-muted hover:bg-toss/10 hover:text-toss transition-colors inline-flex items-center gap-1">
+                        {{ s.signal_type|signal_type_kr }}
+                        <svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </a>
+                    {% else %}
                     <span class="text-xs px-2 py-0.5 rounded-lg bg-elevated text-muted">{{ s.signal_type|signal_type_kr }}</span>
+                    {% endif %}
                     <span class="text-xs px-2 py-0.5 rounded-lg
                         {% if s.direction == 'bullish' %}bg-[#F04452]/10 text-[#F04452]
                         {% else %}bg-toss/10 text-toss{% endif %}">
@@ -138,7 +149,11 @@
                 <div class="text-xs text-muted mb-2">{{ s.created_at.strftime('%m/%d %H:%M') }}</div>
                 {% if s.signal_type not in ('price_vs_close', 'price_momentum') %}
                 {% if s.z_score %}
-                <div class="text-xs text-muted mb-1">{{ s.z_score|z_label }}</div>
+                <div class="text-xs text-muted mb-1">
+                    <a href="/learn/zscore" title="z-score 시그널 설명" class="hover:text-toss transition-colors">
+                        {{ s.z_score|z_label }}
+                    </a>
+                </div>
                 {% endif %}
                 <div class="mb-2">
                     <span class="text-lg font-bold

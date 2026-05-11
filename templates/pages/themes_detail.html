@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title_suffix %} — {{ sector.name }}{% endblock %}
+
+{% block content %}
+<!-- 경로 -->
+<div class="flex items-center gap-2 text-xs text-muted mb-3">
+    <a href="/themes" class="hover:text-white">테마</a>
+    <span>›</span>
+    <span class="text-white">{{ sector.name }}</span>
+</div>
+
+    <!-- 헤더 -->
+    <div class="bg-surface rounded-card p-4 lg:p-5 mb-4">
+        <div class="flex items-end justify-between flex-wrap gap-3">
+            <div>
+                <h1 class="text-xl lg:text-2xl font-bold text-white">{{ sector.name }}</h1>
+                <p class="text-sm text-muted mt-1">총 {{ sector.total }} 종목 · {{ sector.up }} 상승 · {{ sector.flat }} 보합 · {{ sector.down }} 하락</p>
+            </div>
+            <div class="text-right">
+                <p class="text-3xl font-bold tabular-nums
+                          {% if sector.change_pct > 0 %}text-[#F04452]
+                          {% elif sector.change_pct < 0 %}text-toss
+                          {% else %}text-muted{% endif %}">
+                    {{ '%+.2f'|format(sector.change_pct) }}%
+                </p>
+                <p class="text-xs text-muted mt-0.5">업종 평균 등락률</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI 브리핑 박스 -->
+    <div id="ai-brief" class="bg-surface rounded-card p-4 lg:p-5 mb-4 hidden">
+        <div class="flex items-center gap-2 mb-3">
+            <svg class="w-4 h-4 text-toss" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+            </svg>
+            <span class="text-xs text-toss font-medium">AI 분석</span>
+            <span id="ai-brief-news-count" class="text-xs text-muted ml-auto"></span>
+        </div>
+        <div id="ai-brief-loading" class="text-sm text-muted">분석 생성 중...</div>
+        <div id="ai-brief-content" class="hidden">
+            <p id="ai-brief-headline" class="text-sm text-white leading-relaxed mb-3"></p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <p class="text-[11px] text-muted uppercase tracking-wider mb-1">단기 리스크</p>
+                    <p id="ai-brief-risks" class="text-sm text-white"></p>
+                </div>
+                <div>
+                    <p class="text-[11px] text-muted uppercase tracking-wider mb-1">핵심 종목</p>
+                    <p id="ai-brief-top-stocks" class="text-sm text-white"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-4">
+        <button id="brief-trigger"
+                class="px-4 py-2 text-sm rounded-xl bg-toss/10 text-toss font-medium hover:bg-toss/20 transition-colors">
+            <span class="inline-flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                </svg>
+                AI 분석 보기
+            </span>
+        </button>
+    </div>
+
+    <script>
+    (function() {
+        const trigger = document.getElementById('brief-trigger');
+        const box = document.getElementById('ai-brief');
+        const loadingEl = document.getElementById('ai-brief-loading');
+        const contentEl = document.getElementById('ai-brief-content');
+        const headlineEl = document.getElementById('ai-brief-headline');
+        const risksEl = document.getElementById('ai-brief-risks');
+        const stocksEl = document.getElementById('ai-brief-top-stocks');
+        const newsCountEl = document.getElementById('ai-brief-news-count');
+
+        async function loadBrief() {
+            trigger.style.display = 'none';
+            box.classList.remove('hidden');
+            loadingEl.classList.remove('hidden');
+            contentEl.classList.add('hidden');
+            try {
+                const r = await fetch('/api/themes/{{ sector.no }}/brief');
+                if (!r.ok) {
+                    loadingEl.textContent = 'AI 분석 불러오기 실패 (' + r.status + ')';
+                    return;
+                }
+                const d = await r.json();
+                headlineEl.textContent = d.headline || '(요약 없음)';
+                risksEl.textContent = d.risks || '(없음)';
+                stocksEl.textContent = (d.top_stocks || []).join(' · ') || '(없음)';
+                newsCountEl.textContent =
+                    (d.cached ? '캐시 · ' : '방금 · ') +
+                    '뉴스 ' + (d.based_on_news || 0) + '개 기반';
+                loadingEl.classList.add('hidden');
+                contentEl.classList.remove('hidden');
+            } catch (e) {
+                loadingEl.textContent = '오류: ' + e.message;
+            }
+        }
+        trigger.addEventListener('click', loadBrief);
+    })();
+    </script>
+
+    <!-- 정렬 (기본: 거래대금) -->
+    <div class="flex gap-2 mb-3">
+        <a href="/themes/{{ sector.no }}?sort=value"
+           class="px-3 py-1.5 text-xs rounded-xl font-medium transition-colors
+                  {% if sort == 'value' %}bg-toss/10 text-toss{% else %}text-muted hover:text-white active:bg-elevated{% endif %}">거래대금</a>
+        <a href="/themes/{{ sector.no }}?sort=volume"
+           class="px-3 py-1.5 text-xs rounded-xl font-medium transition-colors
+                  {% if sort == 'volume' %}bg-toss/10 text-toss{% else %}text-muted hover:text-white active:bg-elevated{% endif %}">거래량</a>
+        <a href="/themes/{{ sector.no }}?sort=change"
+           class="px-3 py-1.5 text-xs rounded-xl font-medium transition-colors
+                  {% if sort == 'change' %}bg-toss/10 text-toss{% else %}text-muted hover:text-white active:bg-elevated{% endif %}">등락률</a>
+        <a href="/themes/{{ sector.no }}?sort=price"
+           class="px-3 py-1.5 text-xs rounded-xl font-medium transition-colors
+                  {% if sort == 'price' %}bg-toss/10 text-toss{% else %}text-muted hover:text-white active:bg-elevated{% endif %}">현재가</a>
+    </div>
+
+    <!-- 종목 리스트 (한 줄에 하나, 빈 공간은 거래대금 비중 bar 로 시각화) -->
+    {% if not stocks %}
+    <div class="bg-surface rounded-card p-6 text-center text-muted">
+        종목 데이터를 불러올 수 없습니다.
+    </div>
+    {% else %}
+    {# 거래대금 max — bar 정규화 기준 #}
+    {% set max_value = stocks|map(attribute='value')|max %}
+    {% set max_volume = stocks|map(attribute='volume')|max %}
+    <div class="bg-surface rounded-card overflow-hidden divide-y divide-elevated/40">
+        {% for s in stocks %}
+        {% if sort == 'volume' %}
+            {% set bar_value = s.volume %}
+            {% set bar_max = max_volume %}
+            {% set bar_label = "거래량 " ~ "{:,}".format(s.volume) %}
+        {% else %}
+            {% set bar_value = s.value %}
+            {% set bar_max = max_value %}
+            {% set bar_label = "거래대금 " ~ "{:,}".format(s.value) ~ "M" %}
+        {% endif %}
+        {% set bar_w = (bar_value / bar_max * 100) if bar_max > 0 else 0 %}
+        <a href="https://finance.naver.com/item/main.naver?code={{ s.code }}" target="_blank"
+           class="flex items-center gap-3 sm:gap-4 px-4 py-3 hover:bg-elevated/30 transition-colors">
+
+            <!-- 1. 종목명 + 코드 -->
+            <div class="shrink-0 sm:w-[180px] min-w-0">
+                <p class="text-sm text-white font-semibold truncate">{{ s.name }}</p>
+                <p class="text-[11px] text-muted tabular-nums mt-0.5">{{ s.code }}</p>
+            </div>
+
+            <!-- 2. 거래대금 비중 bar (PC) -->
+            <div class="hidden sm:flex flex-1 items-center gap-2.5 min-w-0">
+                <div class="flex-1 h-2 rounded-full overflow-hidden bg-elevated">
+                    <div class="h-full rounded-full
+                                {% if s.change_pct > 0 %}bg-[#F04452]/70
+                                {% elif s.change_pct < 0 %}bg-toss/70
+                                {% else %}bg-muted/50{% endif %}"
+                         style="width: {{ '%.1f'|format(bar_w) }}%"></div>
+                </div>
+                <span class="text-[11px] text-muted tabular-nums shrink-0 w-32 text-right">{{ bar_label }}</span>
+            </div>
+
+            <!-- 모바일 거래대금 -->
+            <div class="sm:hidden flex-1 min-w-0 text-right">
+                <p class="text-[11px] text-muted tabular-nums">{{ bar_label }}</p>
+            </div>
+
+            <!-- 3. 등락률 chip -->
+            <div class="shrink-0 w-[72px] text-center py-1.5 rounded-lg tabular-nums font-bold text-sm
+                        {% if s.change_pct > 0 %}bg-[#F04452]/12 text-[#F04452]
+                        {% elif s.change_pct < 0 %}bg-toss/12 text-toss
+                        {% else %}bg-elevated text-muted{% endif %}">
+                {{ '%+.2f'|format(s.change_pct) }}%
+            </div>
+
+            <!-- 4. 현재가 -->
+            <p class="text-right text-sm text-white tabular-nums shrink-0 font-medium w-24">
+                {{ "{:,.0f}".format(s.price) }}
+            </p>
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+{% endblock %}

@@ -7,6 +7,7 @@ jinja2>=3.1
 sqlalchemy>=2.0
 psycopg2-binary>=2.9
 python-dotenv>=1.1
+markdown>=3.6
 
 # Phase 2: 뉴스 + 센티멘트
 feedparser>=6.0

@@ -135,6 +135,18 @@
     font-size: 11px;
   }
   .ticker { font-size: 9px; color: var(--dim); }
+  .session-badge {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 4px;
+    border-radius: 3px;
+    font-size: 8px;
+    line-height: 12px;
+    background: rgba(255,255,255,0.08);
+    color: var(--dim);
+    vertical-align: middle;
+  }
+  .session-badge.live { background: rgba(58,130,247,0.18); color: var(--accent); }
   .right { text-align: right; flex-shrink: 0; }
   .price { font-variant-numeric: tabular-nums; font-size: 11px; }
   .pct { font-size: 9px; font-variant-numeric: tabular-nums; }
@@ -508,18 +520,26 @@ function renderWatch(items) {
     body.innerHTML = '<div class="empty">관심종목 없음<br><span style="font-size:10px">⚙ 에서 서버/계정 입력</span></div>';
     return;
   }
-  body.innerHTML = currentItems.map(w => `
+  body.innerHTML = currentItems.map(w => {
+    let badge = "";
+    if (w.market === "kr_stock" && w.session_label) {
+      const liveSessions = ["pre_market", "regular", "after_market"];
+      const isLive = liveSessions.includes(w.session);
+      badge = `<span class="session-badge${isLive ? " live" : ""}">${escape_(w.session_label)}</span>`;
+    }
+    return `
     <div class="row" draggable="true" data-id="${w.id}">
       <div class="left">
         <div class="name">${escape_(w.ticker_name || w.ticker)}</div>
-        <div class="ticker">${escape_(w.ticker)}</div>
+        <div class="ticker">${escape_(w.ticker)}${badge}</div>
       </div>
       <div class="right">
         <div class="price">${fmtPrice(w.market, w.price, w.currency)}</div>
         <div class="pct ${pctClass(w.change_pct)}">${fmtPct(w.change_pct)}</div>
       </div>
     </div>
-  `).join("");
+  `;
+  }).join("");
   attachDnD();
 }
 

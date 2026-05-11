@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title_suffix %} — {{ article.title }}{% endblock %}
+
+{% block head_extra %}
+<style>
+    .article-body { color: #E5E8EB; }
+    .article-body h1 { font-size: 1.5rem; font-weight: 700; color: #F2F4F6; margin: 0 0 1.25rem; }
+    .article-body h2 { font-size: 1.125rem; font-weight: 700; color: #F2F4F6; margin: 1.75rem 0 0.75rem; }
+    .article-body h3 { font-size: 1rem; font-weight: 600; color: #F2F4F6; margin: 1.5rem 0 0.5rem; }
+    .article-body p { font-size: 0.9rem; line-height: 1.7; margin: 0.5rem 0 0.9rem; }
+    .article-body ul, .article-body ol { font-size: 0.9rem; line-height: 1.7; margin: 0.5rem 0 0.9rem 1.25rem; }
+    .article-body li { margin: 0.25rem 0; }
+    .article-body strong { color: #F2F4F6; font-weight: 700; }
+    .article-body em { color: #B0B8C1; font-style: italic; }
+    .article-body code {
+        background: #2C2D33; color: #F2F4F6;
+        padding: 0.1rem 0.4rem; border-radius: 4px;
+        font-size: 0.85em; font-family: 'Menlo','Consolas',monospace;
+    }
+    .article-body pre {
+        background: #17171B; border: 1px solid #2C2D33; border-radius: 8px;
+        padding: 0.9rem; overflow-x: auto; margin: 0.75rem 0;
+    }
+    .article-body pre code { background: transparent; padding: 0; font-size: 0.85rem; }
+    .article-body blockquote {
+        border-left: 3px solid #3182F6;
+        padding: 0.4rem 0 0.4rem 0.9rem; margin: 0.75rem 0;
+        background: rgba(49,130,246,0.06);
+        color: #C9D1D9; font-style: italic;
+    }
+    .article-body blockquote p { margin: 0; }
+    .article-body a { color: #3182F6; text-decoration: underline; }
+    .article-body hr { border: 0; border-top: 1px solid #2C2D33; margin: 1.5rem 0; }
+    .article-body table {
+        border-collapse: collapse; width: 100%;
+        margin: 0.75rem 0; font-size: 0.85rem;
+        background: #17171B; border-radius: 8px; overflow: hidden;
+    }
+    .article-body th, .article-body td {
+        border: 1px solid #2C2D33;
+        padding: 0.5rem 0.75rem;
+        text-align: left;
+    }
+    .article-body th { background: #2C2D33; color: #F2F4F6; font-weight: 600; }
+    .article-body td { color: #C9D1D9; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 경로 -->
+<div class="flex items-center gap-2 text-xs text-muted mb-3">
+    <a href="/learn" class="hover:text-white">학습</a>
+    <span>›</span>
+    <span>{{ category_label }}</span>
+</div>
+
+<!-- 본문 (가독성을 위한 측면 컬럼 레이아웃) -->
+<div class="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 lg:gap-6">
+    <article class="bg-surface rounded-card p-5 lg:p-8 min-w-0">
+        <header class="mb-5 pb-4 border-b border-elevated">
+            <h1 class="text-xl lg:text-2xl font-bold text-white">{{ article.title }}</h1>
+            {% if article.summary %}
+            <p class="text-sm text-muted mt-2 leading-relaxed">{{ article.summary }}</p>
+            {% endif %}
+        </header>
+        <div class="article-body">{{ article.body_html|safe }}</div>
+    </article>
+
+    <!-- 사이드: 같은 카테고리 다른 글 -->
+    {% set siblings = grouped.get(article.category, []) %}
+    {% if siblings|length > 1 %}
+    <aside class="bg-surface rounded-card p-4 lg:p-5 lg:h-fit lg:sticky lg:top-4">
+        <h2 class="text-xs font-semibold text-muted uppercase tracking-wider mb-3">{{ category_label }}</h2>
+        <div class="space-y-2">
+            {% for a in siblings %}
+            <a href="/learn/{{ a.slug }}"
+               class="block rounded-xl p-3 transition-colors
+                      {% if a.slug == article.slug %}bg-toss/10 text-toss{% else %}bg-elevated/40 hover:bg-elevated{% endif %}">
+                <p class="text-sm font-semibold {% if a.slug == article.slug %}text-toss{% else %}text-white{% endif %}">{{ a.title }}</p>
+            </a>
+            {% endfor %}
+        </div>
+    </aside>
+    {% endif %}
+</div>
+
+<div class="mt-4 text-center">
+    <a href="/learn" class="text-xs text-muted hover:text-white">← 전체 가이드로</a>
+</div>
+{% endblock %}

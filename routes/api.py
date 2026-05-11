@@ -481,152 +481,26 @@ def _fetch_crypto_candles(ticker: str, interval: str, period: str) -> list[dict]
 
 # ── 내부 함수 ─────────────────────────────────────────────────
 
-def _is_kr_regular_session(now=None) -> bool:
-    """KST 평일 09:00 ~ 15:30 — 정규장 진행 중."""
-    n = now or datetime.now(KST)
-    if n.weekday() >= 5:
-        return False
-    minutes = n.hour * 60 + n.minute
-    return 9 * 60 <= minutes < 15 * 60 + 30
-
-
-_KR_LASTCLOSE_CACHE: dict[str, tuple[float, str, str]] = {}  # ticker -> (prev_close, name, yyyy-mm-dd)
-
-
-def _fetch_kr_lastclose(ticker: str) -> tuple[float, str]:
-    """전일 KRX 정확한 종가 + 종목명 — m.stock integration. 거래일 단위 캐시."""
-    today = datetime.now(KST).strftime("%Y-%m-%d")
-    cached = _KR_LASTCLOSE_CACHE.get(ticker)
-    if cached and cached[2] == today:
-        return cached[0], cached[1]
-
-    try:
-        from data.signal_collectors import _parse_naver_number
-        resp = httpx.get(
-            f"https://m.stock.naver.com/api/stock/{ticker}/integration",
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        prev_close = 0.0
-        for x in data.get("totalInfos", []):
-            if x.get("code") == "lastClosePrice":
-                prev_close = _parse_naver_number(x.get("value", "0"))
-                break
-        name = data.get("stockName", "")
-        if prev_close > 0:
-            _KR_LASTCLOSE_CACHE[ticker] = (prev_close, name, today)
-        return prev_close, name
-    except Exception as e:
-        logger.error(f"integration [{ticker}]: {e}")
-        return 0.0, ""
-
-
 def _fetch_price(ticker: str, market: str) -> dict:
     """마켓별 실시간 가격 fetch.
 
-    한국주식 (토스 표시가와 매칭):
-    - 정규장 (KST 평일 09:00~15:30):
-        현재가 = polling.finance.naver.com (KRX 7초 갱신)
-        전일종가 = m.stock /integration lastClosePrice (정확한 KRX 어제 종가, 거래일 캐시)
-        change_pct = (현재가 - 전일종가) / 전일종가 * 100  (직접 계산)
-        ※ polling 응답의 compareToPreviousClosePrice/fluctuationsRatio 는 부호/기준이
-          가끔 잘못 반환되므로 신뢰 불가 — 직접 계산이 정확.
-    - 정규장 외 + NXT OPEN: NXT 시간외 단일가 (m.stock basic overMarketPriceInfo)
-    - 폴백: m.stock basic closePrice
+    한국주식 — services.widget_pricing.fetch_kr_widget_price() 위임:
+    - 세션별 자동 분기 (프리장 / 정규장 / 정규장 마감 / 애프터장 / 장 마감)
+    - % 기준 = 전날 NXT 종가 (캐시) > 폴백 KRX 어제 종가
+    - session_label 반환 (위젯 배지용)
     """
     try:
         if market == "kr_stock":
-            from data.signal_collectors import _parse_naver_number
-
-            # 정규장 — polling 현재가 + integration 전일종가, % 는 직접 계산
-            if _is_kr_regular_session():
-                prev_close, stock_name = _fetch_kr_lastclose(ticker)
-                try:
-                    poll_resp = httpx.get(
-                        f"https://polling.finance.naver.com/api/realtime/domestic/stock/{ticker}",
-                        headers={
-                            "User-Agent": "Mozilla/5.0",
-                            "Referer": "https://finance.naver.com/",
-                        },
-                        timeout=10,
-                    )
-                    poll_resp.raise_for_status()
-                    payload = poll_resp.json()
-                    datas = payload.get("datas") or []
-                    if datas:
-                        d = datas[0]
-                        cur = _parse_naver_number(d.get("closePrice", "0"))
-                        if cur > 0:
-                            name = stock_name or d.get("stockName", "")
-                            if prev_close > 0:
-                                return {
-                                    "price": cur,
-                                    "prev_close": prev_close,
-                                    "change_pct": (cur - prev_close) / prev_close * 100,
-                                    "name": name,
-                                }
-                            # integration 실패 — polling 응답으로 폴백 (부정확할 수 있음)
-                            diff_abs = _parse_naver_number(d.get("compareToPreviousClosePrice", "0"))
-                            pct_abs = _parse_naver_number(d.get("fluctuationsRatio", "0"))
-                            code = ((d.get("compareToPreviousPrice") or {}).get("code") or "")
-                            sign = -1 if code in ("4", "5") else 1
-                            return {
-                                "price": cur,
-                                "prev_close": cur - diff_abs * sign,
-                                "change_pct": pct_abs * sign,
-                                "name": name,
-                            }
-                except Exception as e:
-                    logger.error(f"polling.finance.naver [{ticker}]: {e}")
-
-            # 정규장 외 — m.stock basic + NXT 시간외 분기
-            basic_resp = httpx.get(
-                f"https://m.stock.naver.com/api/stock/{ticker}/basic",
-                headers={"User-Agent": "Mozilla/5.0"},
-                timeout=10,
-            )
-            basic_resp.raise_for_status()
-            basic = basic_resp.json()
-            stock_name = basic.get("stockName", "")
-
-            if not _is_kr_regular_session():
-                over = basic.get("overMarketPriceInfo") or {}
-                if over.get("overMarketStatus") == "OPEN":
-                    over_price = _parse_naver_number(over.get("overPrice", "0"))
-                    if over_price > 0:
-                        # 시간외 % 도 어제 정규장 종가 (전 거래일) 대비로 통일 — 정규장과 일관성
-                        prev_close, ic_name = _fetch_kr_lastclose(ticker)
-                        name = stock_name or ic_name
-                        if prev_close > 0:
-                            return {
-                                "price": over_price,
-                                "prev_close": prev_close,
-                                "change_pct": (over_price - prev_close) / prev_close * 100,
-                                "name": name,
-                            }
-                        # integration 실패 — NXT 응답으로 폴백
-                        over_diff_abs = _parse_naver_number(over.get("compareToPreviousClosePrice", "0"))
-                        over_pct_abs = _parse_naver_number(over.get("fluctuationsRatio", "0"))
-                        over_code = ((over.get("compareToPreviousPrice") or {}).get("code") or "")
-                        over_sign = -1 if over_code in ("4", "5") else 1
-                        return {
-                            "price": over_price,
-                            "prev_close": over_price - over_diff_abs * over_sign,
-                            "change_pct": over_pct_abs * over_sign,
-                            "name": name,
-                        }
-
-            # 폴백
-            close_price = _parse_naver_number(basic.get("closePrice", "0"))
-            close_diff = _parse_naver_number(basic.get("compareToPreviousClosePrice", "0"))
-            close_pct = _parse_naver_number(basic.get("fluctuationsRatio", "0"))
+            from services.widget_pricing import fetch_kr_widget_price
+            wp = fetch_kr_widget_price(ticker)
             return {
-                "price": close_price,
-                "prev_close": close_price - close_diff,
-                "change_pct": close_pct,
-                "name": stock_name,
+                "price": wp.price,
+                "prev_close": wp.prev_close,
+                "change_pct": wp.change_pct,
+                "name": wp.name,
+                "session": wp.session,
+                "session_label": wp.session_label,
+                "prev_close_kind": wp.prev_close_kind,
             }
 
         elif market == "us_stock" and FINNHUB_API_KEY:
@@ -826,6 +700,37 @@ async def my_accounts_list(request: Request):
             "currency": r.currency,
             "is_active": r.is_active,
         } for r in rows]
+    finally:
+        session.close()
+
+
+@router.get("/my/accounts/{account_id}/holdings")
+async def my_account_holdings(request: Request, account_id: int):
+    """특정 계좌의 현재 보유 종목 (qty > 0). 매도 select 용."""
+    user, denied = _require_user(request)
+    if denied: return denied
+
+    session = SessionLocal()
+    try:
+        acc = session.query(RealAccount).filter(
+            RealAccount.id == account_id, RealAccount.owner == user
+        ).first()
+        if not acc:
+            return JSONResponse(status_code=404, content={"error": "account not found"})
+
+        rows = (
+            session.query(RealHolding)
+            .filter(RealHolding.account_id == account_id, RealHolding.qty > 0)
+            .order_by(RealHolding.ticker_name, RealHolding.ticker)
+            .all()
+        )
+        return [{
+            "ticker": h.ticker,
+            "ticker_name": h.ticker_name,
+            "market": h.market,
+            "qty": h.qty,
+            "avg_cost": h.avg_cost,
+        } for h in rows]
     finally:
         session.close()
 
@@ -1493,13 +1398,18 @@ async def my_refresh_prices(request: Request):
         elif w["market"] == "us_stock":
             wccy = "USD"
         info = price_map.get((w["ticker"], w["market"], wccy), {})
-        watch_out.append({
+        item_out = {
             "id": w["id"], "market": w["market"], "ticker": w["ticker"],
             "ticker_name": w["ticker_name"],
             "currency": wccy,
             "price": info.get("price", 0),
             "change_pct": info.get("change_pct", 0),
-        })
+        }
+        # 한국주식은 세션 배지 정보 추가
+        if w["market"] == "kr_stock":
+            item_out["session"] = info.get("session", "")
+            item_out["session_label"] = info.get("session_label", "")
+        watch_out.append(item_out)
 
     # 집계
     out_holdings = []
@@ -2028,4 +1938,49 @@ async def portfolio_refresh(request: Request):
         "closed": closed_out,
         "trades": trade_out,
         "fetched_at": datetime.now(KST).strftime("%H:%M:%S"),
+    }
+
+
+# ── 테마 AI 브리핑 ───────────────────────────────────────
+
+@router.get("/themes/{no}/brief")
+async def themes_brief(no: str, force: int = 0):
+    """업종 AI 분석. 캐시 우선 (일 단위)."""
+    from services.themes import fetch_sector_stocks, get_sector_by_no
+    from services.theme_brief import generate_brief, get_cached
+
+    sector = get_sector_by_no(no)
+    if not sector:
+        return JSONResponse(status_code=404, content={"error": "sector not found"})
+
+    if not force:
+        cached = get_cached(no)
+        if cached:
+            return {
+                "cached": True,
+                "headline": cached.headline,
+                "risks": cached.risks,
+                "top_stocks": cached.top_stocks,
+                "based_on_news": cached.based_on_news,
+                "date_kst": cached.date_kst,
+            }
+
+    stocks = fetch_sector_stocks(no)
+    # 상승 순으로 정렬 후 상위 8
+    stocks.sort(key=lambda s: s.change_pct, reverse=True)
+    top_for_llm = [
+        {"code": s.code, "name": s.name, "change_pct": s.change_pct}
+        for s in stocks[:8]
+    ]
+    brief = generate_brief(no, sector.name, top_for_llm, force=bool(force))
+    if not brief:
+        return JSONResponse(status_code=503, content={"error": "LLM unavailable"})
+
+    return {
+        "cached": False,
+        "headline": brief.headline,
+        "risks": brief.risks,
+        "top_stocks": brief.top_stocks,
+        "based_on_news": brief.based_on_news,
+        "date_kst": brief.date_kst,
     }
