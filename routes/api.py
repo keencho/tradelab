@@ -481,18 +481,60 @@ def _fetch_crypto_candles(ticker: str, interval: str, period: str) -> list[dict]
 
 # ── 내부 함수 ─────────────────────────────────────────────────
 
+# 시장 시간 외엔 외부 API 호출 안 함. 마지막 fetch 결과 그대로 반환.
+# 코인은 24h → 캐시 X. KR/US 만 적용.
+_PRICE_CACHE: dict[tuple[str, str], dict] = {}
+
+
+def _is_market_active(market: str, now: datetime | None = None) -> bool:
+    """시세 변동 가능 시간 (= 외부 API 호출 의미 있는 시간).
+
+    kr_stock — 평일 KST 08:00 ~ 20:00 (NXT 프리 ~ 애프터)
+    us_stock — KST 평일 17:00 ~ 다음날 10:00 (미국 프리 ~ 애프터, 서머타임 보수적)
+               서머타임 적용 시 16:00 ~ 09:00. 1시간 여유로 17:00 ~ 10:00 통합.
+    crypto  — 24시간 (항상 True)
+    """
+    n = now or datetime.now(KST)
+    if market == "kr_stock":
+        if n.weekday() >= 5:
+            return False
+        m = n.hour * 60 + n.minute
+        return 8 * 60 <= m < 20 * 60
+    if market == "us_stock":
+        dow = n.weekday()
+        m = n.hour * 60 + n.minute
+        if dow == 6:  # 일요일 — 미국 토요일 = 완전 휴장
+            return False
+        if dow == 0:  # 월요일 — 17:00 전은 미국 일요일
+            return m >= 17 * 60
+        if dow == 5:  # 토요일 — 10:00 이후는 미국 금요일 애프터 끝남
+            return m < 10 * 60
+        # 화~금 — KST 10:00 ~ 17:00 사이는 미국 시장 완전 마감 (애프터 끝 ~ 다음 프리 전)
+        return m < 10 * 60 or m >= 17 * 60
+    return True  # crypto 등
+
+
 def _fetch_price(ticker: str, market: str) -> dict:
     """마켓별 실시간 가격 fetch.
+
+    시장 시간 외엔 외부 API 호출 안 하고 캐시 반환 (KR/US 만).
+    캐시 없으면 1회 fetch 후 캐시 → 휴장 동안 같은 값 유지.
 
     한국주식 — services.widget_pricing.fetch_kr_widget_price() 위임:
     - 세션별 자동 분기 (프리장 / 정규장 / 정규장 마감 / 애프터장 / 장 마감)
     - % 기준 = 정규장이면 어제 KRX 종가, 그 외엔 가장 최근 KRX 종가
     """
+    # 시장 휴장 + 캐시 있음 → 캐시 즉시 반환 (외부 API 호출 X)
+    cache_key = (ticker, market)
+    if not _is_market_active(market) and cache_key in _PRICE_CACHE:
+        return _PRICE_CACHE[cache_key]
+
+    data: dict | None = None
     try:
         if market == "kr_stock":
             from services.widget_pricing import fetch_kr_widget_price
             wp = fetch_kr_widget_price(ticker)
-            return {
+            data = {
                 "price": wp.price,
                 "prev_close": wp.prev_close,
                 "change_pct": wp.change_pct,
@@ -508,11 +550,11 @@ def _fetch_price(ticker: str, market: str) -> dict:
                 timeout=10,
             )
             resp.raise_for_status()
-            data = resp.json()
-            return {
-                "price": float(data.get("c", 0)),
-                "prev_close": float(data.get("pc", 0)),
-                "change_pct": float(data.get("dp", 0)),
+            j = resp.json()
+            data = {
+                "price": float(j.get("c", 0)),
+                "prev_close": float(j.get("pc", 0)),
+                "change_pct": float(j.get("dp", 0)),
             }
 
         elif market == "crypto":
@@ -520,7 +562,7 @@ def _fetch_price(ticker: str, market: str) -> dict:
             exchange = ccxt.binance({"timeout": 15000, "options": {"defaultType": "future"}})
             symbol = f"{ticker}/USDT:USDT"
             t = exchange.fetch_ticker(symbol)
-            return {
+            data = {
                 "price": float(t.get("last", 0) or 0),
                 "prev_close": float(t.get("previousClose", 0) or 0),
                 "change_pct": float(t.get("percentage", 0) or 0),
@@ -528,6 +570,15 @@ def _fetch_price(ticker: str, market: str) -> dict:
 
     except Exception as e:
         logger.error(f"가격 fetch [{ticker}]: {e}")
+
+    if data and data.get("price", 0) > 0:
+        # 마지막 성공 결과 캐싱 (KR/US 휴장 시 재사용)
+        _PRICE_CACHE[cache_key] = data
+        return data
+
+    # fetch 실패했는데 캐시는 있음 → 캐시 폴백 (휴장 외 시간에도 마지막 값 유지)
+    if cache_key in _PRICE_CACHE:
+        return _PRICE_CACHE[cache_key]
 
     return {"price": 0, "prev_close": 0, "change_pct": 0}
 
