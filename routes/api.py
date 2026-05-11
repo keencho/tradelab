@@ -486,8 +486,7 @@ def _fetch_price(ticker: str, market: str) -> dict:
 
     한국주식 — services.widget_pricing.fetch_kr_widget_price() 위임:
     - 세션별 자동 분기 (프리장 / 정규장 / 정규장 마감 / 애프터장 / 장 마감)
-    - % 기준 = 전날 NXT 종가 (캐시) > 폴백 KRX 어제 종가
-    - session_label 반환 (위젯 배지용)
+    - % 기준 = 정규장이면 어제 KRX 종가, 그 외엔 가장 최근 KRX 종가
     """
     try:
         if market == "kr_stock":
@@ -500,7 +499,6 @@ def _fetch_price(ticker: str, market: str) -> dict:
                 "name": wp.name,
                 "session": wp.session,
                 "session_label": wp.session_label,
-                "prev_close_kind": wp.prev_close_kind,
             }
 
         elif market == "us_stock" and FINNHUB_API_KEY:
