@@ -543,18 +543,16 @@ def _fetch_price(ticker: str, market: str) -> dict:
                 "session_label": wp.session_label,
             }
 
-        elif market == "us_stock" and FINNHUB_API_KEY:
-            resp = httpx.get(
-                "https://finnhub.io/api/v1/quote",
-                params={"symbol": ticker, "token": FINNHUB_API_KEY},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            j = resp.json()
+        elif market == "us_stock":
+            from services.widget_pricing import fetch_us_widget_price
+            wp = fetch_us_widget_price(ticker)
             data = {
-                "price": float(j.get("c", 0)),
-                "prev_close": float(j.get("pc", 0)),
-                "change_pct": float(j.get("dp", 0)),
+                "price": wp.price,
+                "prev_close": wp.prev_close,
+                "change_pct": wp.change_pct,
+                "name": wp.name,
+                "session": wp.session,
+                "session_label": wp.session_label,
             }
 
         elif market == "crypto":
@@ -1454,8 +1452,8 @@ async def my_refresh_prices(request: Request):
             "price": info.get("price", 0),
             "change_pct": info.get("change_pct", 0),
         }
-        # 한국주식은 세션 배지 정보 추가
-        if w["market"] == "kr_stock":
+        # 주식은 세션 배지 정보 추가 (kr/us 모두)
+        if w["market"] in ("kr_stock", "us_stock"):
             item_out["session"] = info.get("session", "")
             item_out["session_label"] = info.get("session_label", "")
         watch_out.append(item_out)

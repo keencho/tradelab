@@ -522,8 +522,11 @@ function renderWatch(items) {
   }
   body.innerHTML = currentItems.map(w => {
     let badge = "";
-    if (w.market === "kr_stock" && w.session_label) {
-      const liveSessions = ["pre_market", "regular", "after_market"];
+    if ((w.market === "kr_stock" || w.market === "us_stock") && w.session_label) {
+      const liveSessions = [
+        "pre_market", "regular", "after_market",
+        "us_pre_market", "us_regular", "us_after_market",
+      ];
       const isLive = liveSessions.includes(w.session);
       badge = `<span class="session-badge${isLive ? " live" : ""}">${escape_(w.session_label)}</span>`;
     }
@@ -872,7 +875,7 @@ function attachDnD() {
       if (fromIdx < 0 || toIdx < 0) return;
       const [moved] = currentItems.splice(fromIdx, 1);
       currentItems.splice(toIdx, 0, moved);
-      render(currentItems);
+      renderWatch(currentItems);
       await reorderOnServer(currentItems.map(x => x.id));
     });
   });
