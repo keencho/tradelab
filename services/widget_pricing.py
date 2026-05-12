@@ -8,9 +8,8 @@ KR 세션 (KST 평일):
     15:30 - 20:00  NXT 애프터마켓    → NXT 실시간 (overPrice)
     20:00 - 다음날  휴장            → 가장 최근 NXT/KRX 종가
 
-KR % 기준 (토스 방식, KRX 종가 기준):
-    - 정규장 진행 중: ref = lastClosePrice (어제 KRX 정규장 종가)
-    - 그 외 시간: ref = closePrice (가장 최근 KRX 정규장 종가)
+KR % 기준 (토스 방식): 항상 직전 거래일 KRX 정규장 종가 (lastClosePrice) 대비.
+    → 일간 누적 변동 표시. 애프터장에서도 "어제 대비" 유지.
 
 US 세션 (KST 기준, DST 자동 반영 — Yahoo currentTradingPeriod 사용):
     DST(3~11월):  17:00 프리 → 22:30 정규 → 05:00 애프터 → 09:00 마감
@@ -167,10 +166,10 @@ def fetch_kr_widget_price(ticker: str) -> WidgetPrice:
     else:  # regular_close_auction / pre_market_break / NXT 정지 중
         price = close_price_krx
 
-    # % 기준 (토스 방식)
-    # 정규장 진행 중 → 어제 KRX 종가 (lastClosePrice)
-    # 그 외 → 가장 최근 KRX 종가 (closePrice)
-    if sess in ("regular", "regular_close_auction"):
+    # % 기준 (토스 방식): 항상 직전 거래일 KRX 정규장 종가 (lastClosePrice) 대비.
+    # → 어느 세션이든 "어제 대비 일간 누적 변동" 으로 표시.
+    # holiday 만 lastClosePrice 의미 모호 → closePrice 폴백.
+    if sess != "holiday":
         ref, ic_name = _fetch_integration_lastclose(ticker)
         if ref <= 0:
             ref = close_price_krx
