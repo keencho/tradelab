@@ -38,7 +38,8 @@ logger = get_logger("widget_pricing")
 SessionType = Literal[
     "pre_market", "pre_market_break", "regular", "regular_close_auction",
     "after_market", "closed", "holiday",
-    "us_pre_market", "us_regular", "us_after_market", "us_closed",
+    "us_pre_market", "us_regular", "us_after_market",
+    "us_day_market", "us_closed",
 ]
 
 SESSION_LABEL = {
@@ -52,6 +53,7 @@ SESSION_LABEL = {
     "us_pre_market": "프리장",
     "us_regular": "정규장",
     "us_after_market": "애프터장",
+    "us_day_market": "데이마켓",
     "us_closed": "장 마감",
 }
 
@@ -190,7 +192,11 @@ def fetch_kr_widget_price(ticker: str) -> WidgetPrice:
 
 
 def _us_session_from_periods(periods: dict, now_ts: float | None = None) -> SessionType:
-    """Yahoo currentTradingPeriod 기반 현재 세션 (UTC 기준)."""
+    """현재 세션 판단:
+    - pre/regular/post: Yahoo currentTradingPeriod 사용
+    - 그 외 평일 KST 낮: us_day_market (Blue Ocean ATS, 20:00-04:00 ET)
+    - 그 외: us_closed
+    """
     n = now_ts if now_ts is not None else time.time()
     for key, sess in (
         ("pre", "us_pre_market"),
@@ -202,6 +208,25 @@ def _us_session_from_periods(periods: dict, now_ts: float | None = None) -> Sess
         end = p.get("end", 0)
         if start and end and start <= n < end:
             return sess
+
+    # Blue Ocean ATS 데이마켓: 20:00 ET (전일) ~ 04:00 ET, Sun 20:00 ~ Fri 04:00 ET
+    # Yahoo gmtoffset 으로 ET 환산 (DST 자동)
+    pre_off = (periods.get("pre") or {}).get("gmtoffset")
+    if pre_off is not None:
+        from datetime import datetime as _dt, timezone as _tz
+        et = _dt.fromtimestamp(n + pre_off, tz=_tz.utc)
+        dow, h = et.weekday(), et.hour  # 0=Mon, 6=Sun
+        if dow == 5:  # Sat ET → 휴장
+            pass
+        elif dow == 6:  # Sun ET → 20:00 부터 open
+            if h >= 20:
+                return "us_day_market"
+        elif dow == 4:  # Fri ET → 04:00 까지 open
+            if h < 4:
+                return "us_day_market"
+        else:  # Mon-Thu ET
+            if h >= 20 or h < 4:
+                return "us_day_market"
     return "us_closed"
 
 
@@ -249,7 +274,8 @@ def fetch_us_widget_price(ticker: str) -> WidgetPrice:
     elif sess == "us_after_market":
         price = post if post > 0 else regular
         ref = regular if regular > 0 else prev_close
-    else:  # us_closed
+    else:  # us_day_market / us_closed
+        # 데이마켓은 Yahoo 가 실시간 가격을 안 줌 — 마지막 정규장 종가로 표시
         price = regular
         ref = prev_close
 
